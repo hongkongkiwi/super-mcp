@@ -1,5 +1,9 @@
 use clap::Parser;
-use tracing::info;
+use mcp_one::config::ConfigManager;
+use mcp_one::core::ServerManager;
+use mcp_one::http_server::HttpServer;
+use std::sync::Arc;
+use tracing::{error, info};
 
 #[derive(Parser)]
 #[command(name = "mcpo")]
@@ -98,21 +102,42 @@ async fn main() -> anyhow::Result<()> {
             info!("Starting MCP-One server on {}:{}", args.host, args.port);
             info!("Config file: {}", args.config);
 
-            // TODO: Implement serve command
-            println!("Serve command not yet implemented");
-            Ok(())
+            // Expand tilde in config path
+            let config_path = shellexpand::tilde(&args.config).to_string();
+
+            // Load configuration
+            let config_manager = ConfigManager::new(&config_path).await?;
+            let mut config = config_manager.get_config();
+
+            // Override with CLI args
+            config.server.host = args.host;
+            config.server.port = args.port;
+
+            // Create server manager
+            let server_manager = Arc::new(ServerManager::new());
+
+            // Add configured servers
+            for server_config in config.servers.clone() {
+                info!("Configuring server: {}", server_config.name);
+                if let Err(e) = server_manager.add_server(server_config).await {
+                    error!("Failed to add server: {}", e);
+                }
+            }
+
+            // Create and run HTTP server
+            let http_server = HttpServer::new(config, server_manager);
+            http_server.run().await?;
         }
         Cli::Mcp(args) => {
-            println!("MCP command: {:?}", args.command);
-            Ok(())
+            println!("MCP command not yet implemented: {:?}", args.command);
         }
         Cli::Preset(args) => {
-            println!("Preset command: {:?}", args.command);
-            Ok(())
+            println!("Preset command not yet implemented: {:?}", args.command);
         }
         Cli::Registry(args) => {
-            println!("Registry command: {:?}", args.command);
-            Ok(())
+            println!("Registry command not yet implemented: {:?}", args.command);
         }
     }
+
+    Ok(())
 }
