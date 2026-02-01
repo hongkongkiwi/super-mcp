@@ -1,0 +1,61 @@
+# MCP-One Example Configuration
+# Copy to ~/.config/mcp-one/config.toml and customize
+
+[server]
+host = "127.0.0.1"
+port = 3000
+
+[auth]
+type = "none"  # Options: none, static, jwt, oauth
+
+[features]
+auth = false
+scope_validation = true
+sandbox = true
+hot_reload = true
+audit_logging = true
+
+[rate_limit]
+requests_per_minute = 100
+burst_size = 10
+
+[audit]
+path = "~/.local/share/mcp-one/audit.log"
+format = "json"
+max_size_mb = 100
+max_files = 10
+
+# Example MCP servers
+[[servers]]
+name = "filesystem"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+tags = ["filesystem", "local"]
+description = "Local filesystem access (read-only)"
+
+[servers.sandbox]
+network = false
+filesystem = "readonly"
+max_memory_mb = 256
+
+[[servers]]
+name = "fetch"
+command = "uvx"
+args = ["mcp-server-fetch"]
+tags = ["network", "http"]
+description = "HTTP fetch capability"
+
+[servers.sandbox]
+network = true
+filesystem = "readonly"
+
+# Presets
+[[presets]]
+name = "development"
+tags = ["filesystem", "local"]
+description = "Development tools"
+
+[registry]
+url = "https://registry.modelcontextprotocol.io"
+cache_dir = "~/.cache/mcp-one/registry"
+cache_ttl_hours = 24
