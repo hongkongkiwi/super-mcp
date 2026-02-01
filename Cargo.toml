@@ -1,0 +1,70 @@
+[package]
+name = "mcp-one"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <you@example.com>"]
+description = "Secure MCP server proxy with sandboxing"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/yourusername/mcp-one"
+
+[[bin]]
+name = "mcpo"
+path = "src/main.rs"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.43", features = ["full", "rt-multi-thread"] }
+tokio-util = { version = "0.7", features = ["codec"] }
+
+# HTTP framework
+axum = { version = "0.8", features = ["ws", "http2"] }
+tower = { version = "0.5", features = ["full"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "compression-br"] }
+tower_governor = "0.6"
+hyper = { version = "1.5", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+toml = "0.8"
+
+# CLI
+clap = { version = "4.5", features = ["derive", "env"] }
+clap_complete = "4.5"
+
+# Configuration
+figment = { version = "0.10", features = ["toml", "env"] }
+notify = "7.0"
+
+# Authentication
+oauth2 = "4.4"
+jsonwebtoken = "9.3"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+
+# Logging & Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Concurrency utilities
+dashmap = "6.1"
+parking_lot = "0.12"
+
+# Utilities
+uuid = { version = "1.12", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+bytes = "1.9"
+futures = "0.3"
+async-trait = "0.1"
+once_cell = "1.20"
+
+[dev-dependencies]
+tokio-test = "0.4"
+mockall = "0.13"
+tempfile = "3.15"
+wiremock = "0.6"
+criterion = "0.5"
