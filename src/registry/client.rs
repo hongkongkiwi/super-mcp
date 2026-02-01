@@ -5,7 +5,7 @@ use crate::utils::errors::{McpError, McpResult};
 use reqwest::Client;
 use std::collections::HashMap;
 use std::time::Duration;
-use tracing::{debug, error, info, warn};
+use tracing::{info, warn};
 
 /// Registry client for searching and installing MCP servers
 pub struct RegistryClient {
@@ -82,7 +82,7 @@ impl RegistryClient {
         let entries: Vec<RegistryEntry> = response
             .json()
             .await
-            .map_err(|e| McpError::Serialization(e))?;
+            .map_err(|e| McpError::InternalError(format!("Failed to parse response: {}", e)))?;
 
         // Update cache
         let mut cache_entries = HashMap::new();
@@ -132,7 +132,7 @@ impl RegistryClient {
         let entry: RegistryEntry = response
             .json()
             .await
-            .map_err(|e| McpError::Serialization(e))?;
+            .map_err(|e| McpError::InternalError(format!("Failed to parse response: {}", e)))?;
 
         Ok(Some(entry))
     }
@@ -201,7 +201,7 @@ impl RegistryClient {
         let entries: Vec<RegistryEntry> = response
             .json()
             .await
-            .map_err(|e| McpError::Serialization(e))?;
+            .map_err(|e| McpError::InternalError(format!("Failed to parse response: {}", e)))?;
 
         // Update cache
         let mut cache_entries = HashMap::new();

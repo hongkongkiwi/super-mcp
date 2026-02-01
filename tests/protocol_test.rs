@@ -1,4 +1,4 @@
-use mcp_one::core::protocol::*;
+use super_mcp::core::protocol::*;
 use serde_json::json;
 
 #[test]

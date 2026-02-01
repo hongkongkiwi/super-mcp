@@ -66,7 +66,7 @@ impl StreamableHttpTransport {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {},
                 "clientInfo": {
-                    "name": "mcp-one",
+                    "name": "super-mcp",
                     "version": env!("CARGO_PKG_VERSION")
                 }
             })),

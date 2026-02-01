@@ -1,11 +1,11 @@
 use crate::config::Config;
 use crate::utils::errors::{McpError, McpResult};
-use notify::{Config as NotifyConfig, Event, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{Event, RecommendedWatcher};
 use parking_lot::RwLock;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::broadcast;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 #[derive(Debug, Clone)]
 pub enum ConfigEvent {

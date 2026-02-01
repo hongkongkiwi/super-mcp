@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  mcp-one:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mcp-one
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount your config file
+      - ./config.toml:/etc/mcp-one/config.toml:ro
+      # Mount log directory
+      - ./logs:/var/log/mcp-one
+    environment:
+      - RUST_LOG=info
+    restart: unless-stopped
+    # For better security, you can drop capabilities
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETGID
+      - SETUID
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Redis for distributed rate limiting
+  redis:
+    image: redis:7-alpine
+    container_name: mcp-one-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    # Only enable if you need distributed rate limiting
+    profiles:
+      - with-redis
+
+volumes:
+  redis-data:

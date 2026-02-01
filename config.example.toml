@@ -1,5 +1,5 @@
-# MCP-One Example Configuration
-# Copy to ~/.config/mcp-one/config.toml and customize
+# Super MCP Example Configuration
+# Copy to ~/.config/super-mcp/config.toml and customize
 
 [server]
 host = "127.0.0.1"
@@ -20,7 +20,7 @@ requests_per_minute = 100
 burst_size = 10
 
 [audit]
-path = "~/.local/share/mcp-one/audit.log"
+path = "~/.local/share/super-mcp/audit.log"
 format = "json"
 max_size_mb = 100
 max_files = 10
@@ -57,5 +57,5 @@ description = "Development tools"
 
 [registry]
 url = "https://registry.modelcontextprotocol.io"
-cache_dir = "~/.cache/mcp-one/registry"
+cache_dir = "~/.cache/super-mcp/registry"
 cache_ttl_hours = 24

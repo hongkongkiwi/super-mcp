@@ -25,7 +25,7 @@ use tracing::{debug, info, warn};
 /// # Example
 ///
 /// ```rust,no_run
-/// use mcp_one::sandbox::linux_landlock::apply_landlock_restrictions;
+/// use super_mcp::sandbox::linux_landlock::apply_landlock_restrictions;
 ///
 /// let paths = vec!["/tmp/workdir".to_string()];
 /// apply_landlock_restrictions(paths, false).expect("Failed to apply Landlock");

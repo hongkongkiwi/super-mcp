@@ -1,6 +1,6 @@
-# MCP-One
+# Super MCP
 
-A secure, high-performance Model Context Protocol (MCP) server proxy written in Rust.
+A secure, high-performance Model Context Protocol (MCP) server proxy with advanced sandboxing, written in Rust.
 
 ## Features
 
@@ -16,12 +16,12 @@ A secure, high-performance Model Context Protocol (MCP) server proxy written in 
 ### Installation
 
 ```bash
-cargo install mcp-one
+cargo install super-mcp
 ```
 
 ### Configuration
 
-Create a configuration file at `~/.config/mcp-one/config.toml`:
+Create a configuration file at `~/.config/super-mcp/config.toml`:
 
 ```toml
 [server]
@@ -42,12 +42,12 @@ filesystem = "readonly"
 ### Running
 
 ```bash
-mcpo serve
+supermcp serve
 ```
 
 ## Architecture
 
-MCP-One uses a layered architecture:
+Super MCP uses a layered architecture:
 
 - **Security Layer**: Platform-native sandboxing (seccomp/Landlock on Linux, seatbelt on macOS)
 - **Core Layer**: Server lifecycle management, capability handling

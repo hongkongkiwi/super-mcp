@@ -40,7 +40,7 @@ impl Default for RegistryConfig {
             url: "https://registry.modelcontextprotocol.io".to_string(),
             cache_dir: dirs::cache_dir()
                 .unwrap_or_else(|| std::path::PathBuf::from(".cache"))
-                .join("mcp-one/registry"),
+                .join("super-mcp/registry"),
             cache_ttl_hours: 24,
         }
     }

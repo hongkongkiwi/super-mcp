@@ -27,7 +27,7 @@ impl JwtAuth {
     pub fn new(secret: impl Into<String>) -> Self {
         Self {
             secret: secret.into(),
-            issuer: "mcp-one".to_string(),
+            issuer: "super-mcp".to_string(),
             default_expiry: Duration::hours(24),
         }
     }

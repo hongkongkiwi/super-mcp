@@ -34,7 +34,7 @@ pub struct JsonRpcError {
 }
 
 /// Request ID can be string or number
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum RequestId {
     String(String),
@@ -115,7 +115,17 @@ impl JsonRpcRequest {
     pub fn new(method: impl Into<String>, params: Option<Value>) -> Self {
         Self {
             jsonrpc: "2.0".to_string(),
-            id: Some(RequestId::Number(1)), // TODO: Generate unique IDs
+            id: Some(RequestId::Number(1)),
+            method: method.into(),
+            params,
+        }
+    }
+
+    /// Create a new request with a specific ID
+    pub fn with_id(method: impl Into<String>, params: Option<Value>, id: RequestId) -> Self {
+        Self {
+            jsonrpc: "2.0".to_string(),
+            id: Some(id),
             method: method.into(),
             params,
         }

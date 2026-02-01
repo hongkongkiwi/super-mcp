@@ -1,8 +1,10 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use validator::Validate;
 
 /// Main configuration structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Validate)]
 pub struct Config {
     #[serde(default)]
     pub server: ServerConfig,
@@ -22,7 +24,7 @@ pub struct Config {
     pub registry: RegistryConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct ServerConfig {
     pub host: String,
@@ -42,7 +44,7 @@ impl Default for ServerConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct AuthConfig {
     pub auth_type: AuthType,
@@ -51,7 +53,7 @@ pub struct AuthConfig {
     pub token: Option<String>, // For static auth
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum AuthType {
     None,
@@ -77,7 +79,7 @@ impl Default for AuthType {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct FeaturesConfig {
     pub auth: bool,
@@ -99,7 +101,7 @@ impl Default for FeaturesConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct RateLimitConfig {
     pub requests_per_minute: u32,
@@ -115,7 +117,7 @@ impl Default for RateLimitConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct AuditConfig {
     pub path: String,
@@ -124,7 +126,7 @@ pub struct AuditConfig {
     pub max_files: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum LogFormat {
     Json,
@@ -134,7 +136,7 @@ pub enum LogFormat {
 impl Default for AuditConfig {
     fn default() -> Self {
         Self {
-            path: "/var/log/mcp-one/audit.log".to_string(),
+            path: "/var/log/super-mcp/audit.log".to_string(),
             format: LogFormat::Json,
             max_size_mb: 100,
             max_files: 10,
@@ -148,7 +150,7 @@ impl Default for LogFormat {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
 pub struct McpServerConfig {
     pub name: String,
     pub command: String,
@@ -164,7 +166,7 @@ pub struct McpServerConfig {
     pub sandbox: SandboxConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct SandboxConfig {
     pub enabled: bool,
@@ -177,7 +179,7 @@ pub struct SandboxConfig {
     pub max_cpu_percent: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum SandboxType {
     Default,
@@ -185,7 +187,7 @@ pub enum SandboxType {
     None,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum FilesystemAccess {
     Simple(String),           // "readonly" or "full"
@@ -212,7 +214,7 @@ impl Default for SandboxType {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct PresetConfig {
     pub name: String,
     pub tags: Vec<String>,
@@ -220,7 +222,7 @@ pub struct PresetConfig {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct RegistryConfig {
     pub url: String,
@@ -232,7 +234,7 @@ impl Default for RegistryConfig {
     fn default() -> Self {
         Self {
             url: "https://registry.modelcontextprotocol.io".to_string(),
-            cache_dir: "~/.cache/mcp-one/registry".to_string(),
+            cache_dir: "~/.cache/super-mcp/registry".to_string(),
             cache_ttl_hours: 24,
         }
     }

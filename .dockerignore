@@ -1,0 +1,38 @@
+# Git
+.git
+.gitignore
+
+# Rust build artifacts
+target/
+**/*.rs.bk
+*.pdb
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation (not needed in build)
+docs/
+*.md
+
+# Tests (not needed in production build)
+tests/
+benches/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Local config
+config.toml
+!config.example.toml
+
+# Logs
+*.log
