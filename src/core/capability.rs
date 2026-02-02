@@ -1,13 +1,13 @@
 //! Capability Manager for async loading and caching of MCP server capabilities
 
-use crate::core::protocol::{ServerCapabilities, JsonRpcRequest, RequestId, JsonRpcResponse};
+use crate::core::protocol::ServerCapabilities;
 use crate::utils::errors::McpResult;
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::{Duration, Instant};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// Cached server capabilities with metadata
 #[derive(Debug, Clone)]

@@ -14,4 +14,4 @@ pub use security::{
     security_headers_middleware, SecurityHeadersConfig, FrameOptions, HstsConfig,
     XssProtection, ReferrerPolicy, permissive_cors, restrictive_cors,
 };
-pub use size_limit::{size_limit_middleware, SizeLimitConfig, SizeLimitError};;
+pub use size_limit::{size_limit_middleware, SizeLimitConfig, SizeLimitError};

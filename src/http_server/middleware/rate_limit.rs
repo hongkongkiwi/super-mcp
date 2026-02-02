@@ -1,23 +1,24 @@
 //! Rate limiting middleware using tower-governor
 
 use axum::{
-    body::Body,
     extract::{ConnectInfo, Request},
-    http::StatusCode,
     middleware::Next,
     response::Response,
 };
 use governor::{
     clock::DefaultClock,
-    middleware::NoOpMiddleware,
-    state::InMemoryState,
+    middleware::{NoOpMiddleware, StateInformationMiddleware},
+    state::keyed::DefaultKeyedStateStore,
     Quota, RateLimiter,
 };
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
+use tower_governor::key_extractor::SmartIpKeyExtractor;
 
 /// Rate limiter configuration
-type GovernorRateLimiter = RateLimiter<String, InMemoryState, DefaultClock, NoOpMiddleware>;
+type GovernorRateLimiter =
+    RateLimiter<String, DefaultKeyedStateStore<String>, DefaultClock, NoOpMiddleware>;
 
 pub struct RateLimitConfig {
     pub requests_per_minute: u32,
@@ -80,7 +81,7 @@ impl RateLimitManager {
     }
 
     /// Clean up stale user limiters (call periodically)
-    pub fn cleanup_stale_limiters(&self, max_age: std::time::Duration) {
+    pub fn cleanup_stale_limiters(&self, _max_age: std::time::Duration) {
         // This is a placeholder - in production, you'd track last access time
         // and remove entries older than max_age
     }
@@ -94,7 +95,7 @@ impl Default for RateLimitManager {
 
 /// Rate limiting middleware
 pub async fn rate_limit_middleware(
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     request: Request,
     next: Next,
 ) -> Response {
@@ -110,23 +111,17 @@ pub async fn rate_limit_middleware(
 /// Create a tower-governor layer for Axum
 pub fn create_rate_limit_layer(
     config: &RateLimitConfig,
-) -> tower_governor::GovernorLayer<String, InMemoryState, DefaultClock, NoOpMiddleware> {
-    use governor::clock::DefaultClock;
-    use governor::middleware::NoOpMiddleware;
-    use governor::state::InMemoryState;
-    use std::num::NonZeroU32;
+) -> tower_governor::GovernorLayer<SmartIpKeyExtractor, StateInformationMiddleware> {
+    let requests_per_minute = config.requests_per_minute.max(1);
+    let burst_size = config.burst_size.max(1);
+    let nanos_per_request = (60_000_000_000f64 / requests_per_minute as f64).max(1.0);
+    let period = Duration::from_nanos(nanos_per_request.round() as u64);
 
-    let quota = Quota::per_minute(
-        NonZeroU32::new(config.requests_per_minute).unwrap_or_else(|| NonZeroU32::new(100).unwrap())
-    )
-    .allow_burst(
-        NonZeroU32::new(config.burst_size).unwrap_or_else(|| NonZeroU32::new(10).unwrap())
-    );
+    let mut builder = GovernorConfigBuilder::default();
+    builder.period(period).burst_size(burst_size);
+    let mut builder = builder.key_extractor(SmartIpKeyExtractor).use_headers();
 
-    let governor = GovernorConfigBuilder::default()
-        .quota(quota)
-        .key_extractor(tower_governor::key_extractor::SmartIpKeyExtractor)
-        .use_headers()
+    let governor = builder
         .finish()
         .expect("Failed to create governor config");
 
@@ -148,7 +143,7 @@ mod tests {
             burst_size: 5,
         });
 
-        let limiter = manager.get_user_limiter("user1");
+        let _limiter = manager.get_user_limiter("user1");
         assert!(!manager.user_limiters.is_empty());
     }
 

@@ -4,16 +4,18 @@
 //! Multiple JSON-RPC messages can be received in a single response,
 //! separated by newlines (newline-delimited JSON).
 
-use crate::core::protocol::{JsonRpcRequest, JsonRpcResponse};
+use crate::core::protocol::{JsonRpcRequest, JsonRpcResponse, RequestId};
+use crate::core::SharedRequestIdGenerator;
 use crate::transport::traits::Transport;
 use crate::utils::errors::{McpError, McpResult};
 use async_trait::async_trait;
+use dashmap::DashMap;
 use futures::StreamExt;
 use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::sync::{mpsc, Mutex, RwLock};
-use tracing::{debug, error, info, warn};
+use tokio::sync::{oneshot, RwLock};
+use tracing::{debug, info, warn};
 use url::Url;
 
 /// Streamable HTTP transport for MCP servers
@@ -21,9 +23,9 @@ pub struct StreamableHttpTransport {
     endpoint: Url,
     client: reqwest::Client,
     session_id: Arc<RwLock<Option<String>>>,
-    response_tx: mpsc::Sender<JsonRpcResponse>,
-    response_rx: Arc<Mutex<mpsc::Receiver<JsonRpcResponse>>>,
+    pending: Arc<DashMap<RequestId, oneshot::Sender<JsonRpcResponse>>>,
     is_connected: Arc<RwLock<bool>>,
+    request_id_gen: SharedRequestIdGenerator,
 }
 
 impl StreamableHttpTransport {
@@ -39,15 +41,13 @@ impl StreamableHttpTransport {
             .build()
             .map_err(|e| McpError::TransportError(e.to_string()))?;
 
-        let (response_tx, response_rx) = mpsc::channel(100);
-
         let transport = Self {
             endpoint,
             client,
             session_id: Arc::new(RwLock::new(None)),
-            response_tx,
-            response_rx: Arc::new(Mutex::new(response_rx)),
+            pending: Arc::new(DashMap::new()),
             is_connected: Arc::new(RwLock::new(false)),
+            request_id_gen: SharedRequestIdGenerator::new(),
         };
 
         // Initialize connection
@@ -60,7 +60,7 @@ impl StreamableHttpTransport {
         info!("Initializing Streamable HTTP transport: {}", self.endpoint);
 
         // Send initialize request to establish session
-        let init_request = JsonRpcRequest::new(
+        let mut init_request = JsonRpcRequest::new(
             "initialize",
             Some(serde_json::json!({
                 "protocolVersion": "2024-11-05",
@@ -71,6 +71,17 @@ impl StreamableHttpTransport {
                 }
             })),
         );
+
+        if init_request.id.is_none() {
+            init_request.id = Some(self.request_id_gen.next_id());
+        }
+        let request_id = init_request
+            .id
+            .clone()
+            .ok_or_else(|| McpError::InvalidRequest("Missing request id".to_string()))?;
+
+        let (tx, rx) = oneshot::channel();
+        self.pending.insert(request_id.clone(), tx);
 
         let json = serde_json::to_string(&init_request)?;
 
@@ -85,6 +96,7 @@ impl StreamableHttpTransport {
             .map_err(|e| McpError::TransportError(format!("Initialize failed: {}", e)))?;
 
         if !response.status().is_success() {
+            self.pending.remove(&request_id);
             return Err(McpError::TransportError(format!(
                 "HTTP error during initialize: {}",
                 response.status()
@@ -105,12 +117,18 @@ impl StreamableHttpTransport {
         *self.is_connected.write().await = true;
         info!("Streamable HTTP transport initialized");
 
-        Ok(())
+        match tokio::time::timeout(std::time::Duration::from_secs(30), rx).await {
+            Ok(Ok(_response)) => Ok(()),
+            Ok(Err(_)) => Err(McpError::TransportError("Initialize response channel closed".to_string())),
+            Err(_) => {
+                self.pending.remove(&request_id);
+                Err(McpError::Timeout(30000))
+            }
+        }
     }
 
     async fn start_reader(&self, response: reqwest::Response) {
-        let response_tx = self.response_tx.clone();
-        let is_connected = self.is_connected.clone();
+        let pending = self.pending.clone();
 
         tokio::spawn(async move {
             // Get the response bytes as a stream
@@ -133,9 +151,14 @@ impl StreamableHttpTransport {
 
                 match serde_json::from_str::<JsonRpcResponse>(&line) {
                     Ok(response) => {
-                        if let Err(e) = response_tx.send(response).await {
-                            error!("Failed to send response: {}", e);
-                            break;
+                        if let Some(id) = response.id.clone() {
+                            if let Some((_, tx)) = pending.remove(&id) {
+                                let _ = tx.send(response);
+                            } else {
+                                debug!("Received streamable response with unknown id: {:?}", id);
+                            }
+                        } else {
+                            debug!("Received streamable response without id, ignoring");
                         }
                     }
                     Err(e) => {
@@ -145,7 +168,6 @@ impl StreamableHttpTransport {
             }
 
             info!("Streamable HTTP reader task ended");
-            *is_connected.write().await = false;
         });
     }
 
@@ -170,6 +192,18 @@ impl Transport for StreamableHttpTransport {
             return Err(McpError::TransportError("Transport not connected".to_string()));
         }
 
+        let mut request = request;
+        if request.id.is_none() {
+            request.id = Some(self.request_id_gen.next_id());
+        }
+        let request_id = request
+            .id
+            .clone()
+            .ok_or_else(|| McpError::InvalidRequest("Missing request id".to_string()))?;
+
+        let (tx, rx) = oneshot::channel();
+        self.pending.insert(request_id.clone(), tx);
+
         let json = serde_json::to_string(&request)?;
         debug!("Sending streamable request: {}", json);
 
@@ -187,18 +221,24 @@ impl Transport for StreamableHttpTransport {
             .map_err(|e| McpError::TransportError(format!("Request failed: {}", e)))?;
 
         if !response.status().is_success() {
+            self.pending.remove(&request_id);
             return Err(McpError::TransportError(format!(
                 "HTTP error: {}",
                 response.status()
             )));
         }
 
+        // Start reader for this response stream
+        self.start_reader(response).await;
+
         // Wait for response via channel
-        let mut rx = self.response_rx.lock().await;
-        match tokio::time::timeout(std::time::Duration::from_secs(30), rx.recv()).await {
-            Ok(Some(response)) => Ok(response),
-            Ok(None) => Err(McpError::TransportError("Response channel closed".to_string())),
-            Err(_) => Err(McpError::Timeout(30000)),
+        match tokio::time::timeout(std::time::Duration::from_secs(30), rx).await {
+            Ok(Ok(response)) => Ok(response),
+            Ok(Err(_)) => Err(McpError::TransportError("Response channel closed".to_string())),
+            Err(_) => {
+                self.pending.remove(&request_id);
+                Err(McpError::Timeout(30000))
+            }
         }
     }
 
@@ -208,6 +248,9 @@ impl Transport for StreamableHttpTransport {
         if !self.is_connected().await {
             return Err(McpError::TransportError("Transport not connected".to_string()));
         }
+
+        let mut request = request;
+        request.id = None;
 
         let json = serde_json::to_string(&request)?;
         debug!("Sending streamable notification: {}", json);
@@ -258,6 +301,7 @@ impl Transport for StreamableHttpTransport {
         }
 
         *self.is_connected.write().await = false;
+        self.pending.clear();
         Ok(())
     }
 }

@@ -5,12 +5,11 @@
 
 use crate::utils::errors::{McpError, McpResult};
 use async_trait::async_trait;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::error;
 
 /// State backend trait
 #[async_trait]
@@ -300,61 +299,11 @@ impl StateBackend for InMemoryBackend {
     }
 }
 
-/// etcd backend (placeholder for production)
-pub struct EtcdBackend {
-    endpoints: Vec<String>,
-}
-
-impl EtcdBackend {
-    /// Create a new etcd backend
-    pub fn new(endpoints: Vec<String>) -> Self {
-        Self { endpoints }
-    }
-}
-
-#[async_trait]
-impl StateBackend for EtcdBackend {
-    async fn get(&self, _key: &str) -> McpResult<Option<Vec<u8>>> {
-        // Placeholder: would use etcd-client crate
-        Err(McpError::ConfigError(
-            "etcd backend not implemented. Use InMemoryBackend for now.".to_string()
-        ))
-    }
-
-    async fn set(&self, _key: &str, _value: Vec<u8>) -> McpResult<()> {
-        Err(McpError::ConfigError(
-            "etcd backend not implemented. Use InMemoryBackend for now.".to_string()
-        ))
-    }
-
-    async fn delete(&self, _key: &str) -> McpResult<()> {
-        Err(McpError::ConfigError(
-            "etcd backend not implemented. Use InMemoryBackend for now.".to_string()
-        ))
-    }
-
-    async fn watch(&self, _key: &str) -> McpResult<tokio::sync::mpsc::Receiver<StateEvent>> {
-        Err(McpError::ConfigError(
-            "etcd backend not implemented. Use InMemoryBackend for now.".to_string()
-        ))
-    }
-
-    async fn cas(&self, _key: &str, _expected: Option<Vec<u8>>, _new: Vec<u8>) -> McpResult<bool> {
-        Err(McpError::ConfigError(
-            "etcd backend not implemented. Use InMemoryBackend for now.".to_string()
-        ))
-    }
-
-    async fn list(&self, _prefix: &str) -> McpResult<Vec<String>> {
-        Err(McpError::ConfigError(
-            "etcd backend not implemented. Use InMemoryBackend for now.".to_string()
-        ))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde::Deserialize;
+    use std::time::Duration;
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     struct TestData {

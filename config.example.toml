@@ -7,6 +7,21 @@ port = 3000
 
 [auth]
 type = "none"  # Options: none, static, jwt, oauth
+# token = "static-token"           # Required for static auth
+# jwt_secret = "supersecret"       # Required for jwt auth
+# issuer = "https://issuer.example" # Required for jwt auth and OAuth discovery
+# client_id = "client-id"          # Required for oauth auth
+# client_secret = "client-secret"  # Required for oauth auth
+# auth_url = "https://.../authorize" # Optional if issuer is provided
+# token_url = "https://.../token"     # Optional if issuer is provided
+# introspection_url = "https://.../introspect" # Recommended for oauth validation
+# userinfo_url = "https://.../userinfo"       # Fallback if introspection not available
+# jwks_url = "https://.../jwks.json" # Optional JWKS for JWT validation
+# expected_audiences = ["your-audience"] # Optional audience check for JWT/JWKS
+# allowed_algs = ["RS256"]           # Optional allowed JWT algorithms for JWKS
+# jwks_cache_ttl_seconds = 300       # Optional JWKS cache TTL (seconds)
+# allow_unverified_jwt = false      # Set true only for dev/testing
+# required_scopes = ["mcp:access"]  # Optional scope enforcement
 
 [features]
 auth = false

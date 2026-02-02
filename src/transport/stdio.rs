@@ -1,21 +1,23 @@
-use crate::core::protocol::{JsonRpcRequest, JsonRpcResponse};
+use crate::core::protocol::{JsonRpcRequest, JsonRpcResponse, RequestId};
+use crate::core::SharedRequestIdGenerator;
 use crate::sandbox::Sandbox;
 use crate::transport::traits::Transport;
 use crate::utils::errors::{McpError, McpResult};
 use async_trait::async_trait;
+use dashmap::DashMap;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout};
-use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::sync::{oneshot, Mutex, RwLock};
 use tracing::{debug, error, info, warn};
 
 /// Stdio transport for MCP servers
 pub struct StdioTransport {
     child: Arc<Mutex<Child>>,
     stdin: Arc<Mutex<ChildStdin>>,
-    response_tx: mpsc::Sender<JsonRpcResponse>,
-    response_rx: Arc<Mutex<mpsc::Receiver<JsonRpcResponse>>>,
+    pending: Arc<DashMap<RequestId, oneshot::Sender<JsonRpcResponse>>>,
     is_connected: Arc<RwLock<bool>>,
+    request_id_gen: SharedRequestIdGenerator,
 }
 
 impl StdioTransport {
@@ -47,14 +49,12 @@ impl StdioTransport {
             .take()
             .ok_or_else(|| McpError::TransportError("Failed to open stdout".to_string()))?;
 
-        let (response_tx, response_rx) = mpsc::channel(100);
-
         let transport = Self {
             child: Arc::new(Mutex::new(child)),
             stdin: Arc::new(Mutex::new(stdin)),
-            response_tx,
-            response_rx: Arc::new(Mutex::new(response_rx)),
+            pending: Arc::new(DashMap::new()),
             is_connected: Arc::new(RwLock::new(true)),
+            request_id_gen: SharedRequestIdGenerator::new(),
         };
 
         // Start response reader task
@@ -64,7 +64,7 @@ impl StdioTransport {
     }
 
     async fn start_reader(&self, stdout: ChildStdout) {
-        let response_tx = self.response_tx.clone();
+        let pending = self.pending.clone();
         let is_connected = self.is_connected.clone();
 
         tokio::spawn(async move {
@@ -76,9 +76,14 @@ impl StdioTransport {
 
                 match serde_json::from_str::<JsonRpcResponse>(&line) {
                     Ok(response) => {
-                        if let Err(e) = response_tx.send(response).await {
-                            error!("Failed to send response: {}", e);
-                            break;
+                        if let Some(id) = response.id.clone() {
+                            if let Some((_, tx)) = pending.remove(&id) {
+                                let _ = tx.send(response);
+                            } else {
+                                warn!("Received response with unknown id: {:?}", id);
+                            }
+                        } else {
+                            debug!("Received response without id, ignoring");
                         }
                     }
                     Err(e) => {
@@ -89,6 +94,7 @@ impl StdioTransport {
 
             info!("Stdio reader task ended");
             *is_connected.write().await = false;
+            pending.clear();
         });
     }
 }
@@ -100,23 +106,46 @@ impl Transport for StdioTransport {
             return Err(McpError::TransportError("Transport not connected".to_string()));
         }
 
+        let mut request = request;
+        if request.id.is_none() {
+            request.id = Some(self.request_id_gen.next_id());
+        }
+        let request_id = request
+            .id
+            .clone()
+            .ok_or_else(|| McpError::InvalidRequest("Missing request id".to_string()))?;
+
+        let (tx, rx) = oneshot::channel();
+        self.pending.insert(request_id.clone(), tx);
+
         let json = serde_json::to_string(&request)?;
         debug!("Sending: {}", json);
 
         // Write request
         {
             let mut stdin = self.stdin.lock().await;
-            stdin.write_all(json.as_bytes()).await?;
-            stdin.write_all(b"\n").await?;
-            stdin.flush().await?;
+            if let Err(e) = stdin.write_all(json.as_bytes()).await {
+                self.pending.remove(&request_id);
+                return Err(McpError::Io(e));
+            }
+            if let Err(e) = stdin.write_all(b"\n").await {
+                self.pending.remove(&request_id);
+                return Err(McpError::Io(e));
+            }
+            if let Err(e) = stdin.flush().await {
+                self.pending.remove(&request_id);
+                return Err(McpError::Io(e));
+            }
         }
 
         // Wait for response
-        let mut rx = self.response_rx.lock().await;
-        match tokio::time::timeout(std::time::Duration::from_secs(30), rx.recv()).await {
-            Ok(Some(response)) => Ok(response),
-            Ok(None) => Err(McpError::TransportError("Response channel closed".to_string())),
-            Err(_) => Err(McpError::Timeout(30000)),
+        match tokio::time::timeout(std::time::Duration::from_secs(30), rx).await {
+            Ok(Ok(response)) => Ok(response),
+            Ok(Err(_)) => Err(McpError::TransportError("Response channel closed".to_string())),
+            Err(_) => {
+                self.pending.remove(&request_id);
+                Err(McpError::Timeout(30000))
+            }
         }
     }
 
@@ -124,6 +153,9 @@ impl Transport for StdioTransport {
         if !self.is_connected().await {
             return Err(McpError::TransportError("Transport not connected".to_string()));
         }
+
+        let mut request = request;
+        request.id = None;
 
         let json = serde_json::to_string(&request)?;
         debug!("Sending notification: {}", json);
@@ -155,6 +187,7 @@ impl Transport for StdioTransport {
         }
 
         *self.is_connected.write().await = false;
+        self.pending.clear();
         Ok(())
     }
 }

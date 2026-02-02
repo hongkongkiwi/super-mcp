@@ -1,7 +1,6 @@
 //! CLI command tests
 
 use super_mcp::cli;
-use std::path::PathBuf;
 use tempfile::TempDir;
 use tokio::fs;
 

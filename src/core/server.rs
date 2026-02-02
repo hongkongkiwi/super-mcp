@@ -53,6 +53,7 @@ pub struct ManagedServer {
     pub config: McpServerConfig,
     transport: Arc<RwLock<Box<dyn Transport>>>,
     _sandbox: Arc<dyn Sandbox>,
+    transport_type: TransportType,
 }
 
 impl ManagedServer {
@@ -100,6 +101,7 @@ impl ManagedServer {
             config,
             transport: Arc::new(RwLock::new(transport)),
             _sandbox: sandbox_arc,
+            transport_type,
         })
     }
 
@@ -119,7 +121,7 @@ impl ManagedServer {
 
     /// Get the transport type used by this server
     pub fn transport_type(&self) -> TransportType {
-        TransportType::Stdio
+        self.transport_type
     }
 }
 

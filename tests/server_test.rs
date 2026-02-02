@@ -24,12 +24,12 @@ async fn test_add_server() {
         sandbox: Default::default(),
     };
     
-    let result = manager.add_server(config).await;
+    let _result = manager.add_server(config).await;
     // Note: This may fail in CI if echo is not available
     // but the test structure is valid
     
     // Even if add fails, we can test the list
-    let servers = manager.list_servers();
+    let _servers = manager.list_servers();
     // Server might not be added if spawn fails
 }
 
@@ -70,10 +70,10 @@ async fn test_get_servers_by_tags() {
     let _ = manager.add_server(config2).await;
     
     // Test get by tags
-    let filesystem_servers = manager.get_servers_by_tags(&["filesystem".to_string()]).await;
+    let _filesystem_servers = manager.get_servers_by_tags(&["filesystem".to_string()]).await;
     // May be empty if servers weren't added successfully
     
-    let network_servers = manager.get_servers_by_tags(&["network".to_string()]).await;
+    let _network_servers = manager.get_servers_by_tags(&["network".to_string()]).await;
 }
 
 #[tokio::test]

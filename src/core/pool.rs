@@ -7,12 +7,13 @@ use crate::config::McpServerConfig;
 use crate::core::protocol::{JsonRpcRequest, JsonRpcResponse};
 use crate::sandbox::create_sandbox;
 use crate::transport::{StdioTransport, Transport};
-use crate::utils::errors::{McpError, McpResult};
+use crate::utils::errors::McpResult;
 use dashmap::DashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
-use tokio::time::{interval, Duration, Instant};
-use tracing::{debug, error, info, warn};
+use tokio::time::{Duration, Instant};
+use tracing::{debug, info, warn};
 
 /// Pooled connection to an MCP server
 pub struct PooledConnection {
@@ -26,8 +27,8 @@ pub struct PooledConnection {
     last_used: Arc<RwLock<Instant>>,
     /// Connection health status
     healthy: Arc<RwLock<bool>>,
-    /// Server configuration
-    config: McpServerConfig,
+    /// Whether this connection is currently in use
+    in_use: Arc<AtomicBool>,
 }
 
 impl PooledConnection {
@@ -54,7 +55,7 @@ impl PooledConnection {
             created_at: now,
             last_used: Arc::new(RwLock::new(now)),
             healthy: Arc::new(RwLock::new(true)),
-            config,
+            in_use: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -98,6 +99,12 @@ impl PooledConnection {
     }
 }
 
+impl Drop for PooledConnection {
+    fn drop(&mut self) {
+        self.in_use.store(false, Ordering::SeqCst);
+    }
+}
+
 /// Connection pool configuration
 #[derive(Debug, Clone)]
 pub struct PoolConfig {
@@ -137,14 +144,11 @@ pub struct ConnectionPoolManager {
     pools: DashMap<String, ConnectionPool>,
     /// Pool configuration
     config: PoolConfig,
-    /// Channel for pool maintenance tasks
-    maintenance_tx: mpsc::Sender<PoolMaintenanceTask>,
 }
 
 #[derive(Debug)]
 enum PoolMaintenanceTask {
     HealthCheck,
-    Cleanup,
 }
 
 impl ConnectionPoolManager {
@@ -155,7 +159,6 @@ impl ConnectionPoolManager {
         let manager = Self {
             pools: DashMap::new(),
             config,
-            maintenance_tx: maintenance_tx.clone(),
         };
 
         // Spawn maintenance task
@@ -171,9 +174,6 @@ impl ConnectionPoolManager {
                         match task {
                             PoolMaintenanceTask::HealthCheck => {
                                 // Health check is done per-pool
-                            }
-                            PoolMaintenanceTask::Cleanup => {
-                                // Cleanup is done per-pool
                             }
                         }
                     }
@@ -200,7 +200,9 @@ impl ConnectionPoolManager {
     ) -> McpResult<PooledConnection> {
         if !self.config.enabled {
             // If pooling is disabled, create a new connection each time
-            return PooledConnection::new(config.clone(), format!("{}-ephemeral", server_name)).await;
+            let conn = PooledConnection::new(config.clone(), format!("{}-ephemeral", server_name)).await?;
+            conn.in_use.store(true, Ordering::SeqCst);
+            return Ok(conn);
         }
 
         let pool = self.get_or_create_pool(server_name);
@@ -209,7 +211,17 @@ impl ConnectionPoolManager {
         {
             let pool_read = pool.read().await;
             for conn in pool_read.iter() {
+                if conn.in_use.load(Ordering::SeqCst) {
+                    continue;
+                }
                 if conn.is_healthy().await && conn.idle_duration().await < self.config.max_idle_time {
+                    if conn
+                        .in_use
+                        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_err()
+                    {
+                        continue;
+                    }
                     debug!("Reusing existing connection {} for {}", conn.id, server_name);
                     return Ok(PooledConnection {
                         id: conn.id.clone(),
@@ -217,7 +229,7 @@ impl ConnectionPoolManager {
                         created_at: conn.created_at,
                         last_used: conn.last_used.clone(),
                         healthy: conn.healthy.clone(),
-                        config: config.clone(),
+                        in_use: conn.in_use.clone(),
                     });
                 }
             }
@@ -226,6 +238,7 @@ impl ConnectionPoolManager {
         // Create a new connection
         let conn_id = format!("{}-{}", server_name, uuid::Uuid::new_v4());
         let conn = PooledConnection::new(config.clone(), conn_id).await?;
+        conn.in_use.store(true, Ordering::SeqCst);
 
         // Add to pool if under limit
         {
@@ -237,7 +250,7 @@ impl ConnectionPoolManager {
                     created_at: conn.created_at,
                     last_used: conn.last_used.clone(),
                     healthy: conn.healthy.clone(),
-                    config: config.clone(),
+                    in_use: conn.in_use.clone(),
                 });
             }
         }
@@ -248,7 +261,7 @@ impl ConnectionPoolManager {
 
     /// Release a connection back to the pool (no-op for now, connections stay in pool)
     pub async fn release_connection(&self, _server_name: &str, _conn: PooledConnection) {
-        // Connection stays in the pool, last_used was already updated
+        _conn.in_use.store(false, Ordering::SeqCst);
     }
 
     /// Clean up stale connections for a server
@@ -263,13 +276,11 @@ impl ConnectionPoolManager {
 
         // Remove stale or unhealthy connections
         pool_write.retain(|conn| {
+            if conn.in_use.load(Ordering::SeqCst) {
+                return true;
+            }
             let age = conn.age();
-            let is_healthy = tokio::task::block_in_place(|| {
-                // This is a bit hacky - ideally we'd use async here
-                true
-            });
-
-            age < self.config.max_connection_age && is_healthy
+            age < self.config.max_connection_age
         });
 
         let after_count = pool_write.len();

@@ -1,7 +1,7 @@
 //! Integration tests
 
 use super_mcp::config::{Config, McpServerConfig, validation::ConfigValidator};
-use super_mcp::core::protocol::{JsonRpcRequest, JsonRpcResponse, RequestId};
+use super_mcp::core::protocol::JsonRpcRequest;
 use serde_json::json;
 use std::collections::HashMap;
 use tempfile::TempDir;
@@ -126,7 +126,7 @@ port = 3000
     
     // Create manager and subscribe to events
     let manager = ConfigManager::new(&config_path).await.unwrap();
-    let mut rx = manager.subscribe();
+    let _rx = manager.subscribe();
     
     // Modify config to trigger event
     let new_config = r#"

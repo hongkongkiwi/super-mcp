@@ -104,7 +104,7 @@ impl MigrationHelper {
 ║  servers[*].tags         → servers[*].tags                                    ║
 ║  servers[*].sandbox.*    → servers[*].sandbox.*                               ║
 ║  auth.type               → auth.auth_type                                     ║
-║  auth.jwt_secret         → auth.token (for JWT)                               ║
+║  auth.jwt_secret         → auth.jwt_secret                                    ║
 ║  auth.oauth_issuer       → auth.issuer                                        ║
 ║  sandboxing.enabled      → servers[*].sandbox.enabled                         ║
 ║  features.hot_reload     → features.hot_reload                                ║

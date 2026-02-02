@@ -1,5 +1,5 @@
 use crate::core::protocol::{JsonRpcRequest, JsonRpcResponse};
-use crate::core::ServerManager;
+use crate::core::{RequestRouter, RoutingStrategy, ServerManager};
 use axum::{
     extract::{Path, State},
     response::Json,
@@ -17,8 +17,6 @@ pub async fn mcp_handler(
     State(server_manager): State<Arc<ServerManager>>,
     Json(request): Json<JsonRpcRequest>,
 ) -> Result<Json<JsonRpcResponse>, crate::utils::errors::McpError> {
-    // For now, route to first available server
-    // TODO: Implement proper routing logic
     let servers = server_manager.list_servers();
     if servers.is_empty() {
         return Err(crate::utils::errors::McpError::ServerNotFound(
@@ -26,9 +24,16 @@ pub async fn mcp_handler(
         ));
     }
 
-    let response = server_manager
-        .send_request(&servers[0], request)
-        .await?;
+    let mut router = RequestRouter::new(RoutingStrategy::Capability);
+    for name in servers {
+        if let Some(server) = server_manager.get_server(&name) {
+            router.register_server(name, server.config.tags.clone());
+        }
+    }
+
+    let server_name = router.route(&request)?;
+
+    let response = server_manager.send_request(&server_name, request).await?;
 
     Ok(Json(response))
 }

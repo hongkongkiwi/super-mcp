@@ -1,12 +1,14 @@
 //! SSE (Server-Sent Events) transport for MCP communication
-use crate::core::protocol::{JsonRpcRequest, JsonRpcResponse};
+use crate::core::protocol::{JsonRpcRequest, JsonRpcResponse, RequestId};
+use crate::core::SharedRequestIdGenerator;
 use crate::transport::traits::Transport;
 use crate::utils::errors::{McpError, McpResult};
 use async_trait::async_trait;
+use dashmap::DashMap;
 use futures::stream::StreamExt;
 use reqwest::header::{ACCEPT, CACHE_CONTROL, CONTENT_TYPE};
 use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::sync::{oneshot, RwLock};
 use tracing::{debug, error, info};
 use url::Url;
 
@@ -15,9 +17,9 @@ pub struct SseTransport {
     endpoint: Url,
     client: reqwest::Client,
     session_id: Arc<RwLock<Option<String>>>,
-    response_tx: mpsc::Sender<JsonRpcResponse>,
-    response_rx: Arc<Mutex<mpsc::Receiver<JsonRpcResponse>>>,
+    pending: Arc<DashMap<RequestId, oneshot::Sender<JsonRpcResponse>>>,
     is_connected: Arc<RwLock<bool>>,
+    request_id_gen: SharedRequestIdGenerator,
 }
 
 impl SseTransport {
@@ -32,15 +34,13 @@ impl SseTransport {
             .build()
             .map_err(|e| McpError::TransportError(e.to_string()))?;
 
-        let (response_tx, response_rx) = mpsc::channel(100);
-
         let transport = Self {
             endpoint,
             client,
             session_id: Arc::new(RwLock::new(None)),
-            response_tx,
-            response_rx: Arc::new(Mutex::new(response_rx)),
+            pending: Arc::new(DashMap::new()),
             is_connected: Arc::new(RwLock::new(false)),
+            request_id_gen: SharedRequestIdGenerator::new(),
         };
 
         // Connect to SSE endpoint
@@ -86,31 +86,56 @@ impl SseTransport {
     }
 
     async fn start_reader(&self, response: reqwest::Response) {
-        let response_tx = self.response_tx.clone();
+        let pending = self.pending.clone();
         let is_connected = self.is_connected.clone();
 
         tokio::spawn(async move {
             let mut stream = response.bytes_stream();
+            let mut buffer = String::new();
+            let mut event_data = String::new();
 
             while let Some(chunk) = stream.next().await {
                 match chunk {
                     Ok(bytes) => {
-                        if let Ok(text) = String::from_utf8(bytes.to_vec()) {
-                            // Parse SSE events (format: "data: {...}\n\n")
-                            for line in text.lines() {
-                                if let Some(data) = line.strip_prefix("data: ") {
-                                    match serde_json::from_str::<JsonRpcResponse>(data) {
+                        let text = String::from_utf8_lossy(&bytes);
+                        buffer.push_str(&text);
+
+                        while let Some(pos) = buffer.find('\n') {
+                            let mut line = buffer[..pos].to_string();
+                            buffer = buffer[pos + 1..].to_string();
+
+                            if line.ends_with('\r') {
+                                line.pop();
+                            }
+
+                            if line.is_empty() {
+                                if !event_data.is_empty() {
+                                    let payload = event_data.trim_end_matches('\n');
+                                    match serde_json::from_str::<JsonRpcResponse>(payload) {
                                         Ok(response) => {
-                                            if let Err(e) = response_tx.send(response).await {
-                                                error!("Failed to send response: {}", e);
-                                                break;
+                                            if let Some(id) = response.id.clone() {
+                                                if let Some((_, tx)) = pending.remove(&id) {
+                                                    let _ = tx.send(response);
+                                                } else {
+                                                    debug!("Received SSE response with unknown id: {:?}", id);
+                                                }
+                                            } else {
+                                                debug!("Received SSE response without id, ignoring");
                                             }
                                         }
                                         Err(e) => {
                                             debug!("Failed to parse SSE data: {}", e);
                                         }
                                     }
+                                    event_data.clear();
                                 }
+                                continue;
+                            }
+
+                            if let Some(data) = line.strip_prefix("data:") {
+                                let data = data.trim_start();
+                                event_data.push_str(data);
+                                event_data.push('\n');
                             }
                         }
                     }
@@ -121,8 +146,29 @@ impl SseTransport {
                 }
             }
 
+            if !event_data.is_empty() {
+                let payload = event_data.trim_end_matches('\n');
+                match serde_json::from_str::<JsonRpcResponse>(payload) {
+                    Ok(response) => {
+                        if let Some(id) = response.id.clone() {
+                            if let Some((_, tx)) = pending.remove(&id) {
+                                let _ = tx.send(response);
+                            } else {
+                                debug!("Received SSE response with unknown id: {:?}", id);
+                            }
+                        } else {
+                            debug!("Received SSE response without id, ignoring");
+                        }
+                    }
+                    Err(e) => {
+                        debug!("Failed to parse SSE data: {}", e);
+                    }
+                }
+            }
+
             info!("SSE reader task ended");
             *is_connected.write().await = false;
+            pending.clear();
         });
     }
 
@@ -147,6 +193,18 @@ impl Transport for SseTransport {
             return Err(McpError::TransportError("Transport not connected".to_string()));
         }
 
+        let mut request = request;
+        if request.id.is_none() {
+            request.id = Some(self.request_id_gen.next_id());
+        }
+        let request_id = request
+            .id
+            .clone()
+            .ok_or_else(|| McpError::InvalidRequest("Missing request id".to_string()))?;
+
+        let (tx, rx) = oneshot::channel();
+        self.pending.insert(request_id.clone(), tx);
+
         let json = serde_json::to_string(&request)?;
         debug!("Sending SSE request: {}", json);
 
@@ -164,6 +222,7 @@ impl Transport for SseTransport {
             .map_err(|e| McpError::TransportError(format!("Request failed: {}", e)))?;
 
         if !response.status().is_success() {
+            self.pending.remove(&request_id);
             return Err(McpError::TransportError(format!(
                 "HTTP error: {}",
                 response.status()
@@ -171,11 +230,13 @@ impl Transport for SseTransport {
         }
 
         // Wait for response via SSE channel
-        let mut rx = self.response_rx.lock().await;
-        match tokio::time::timeout(std::time::Duration::from_secs(30), rx.recv()).await {
-            Ok(Some(response)) => Ok(response),
-            Ok(None) => Err(McpError::TransportError("Response channel closed".to_string())),
-            Err(_) => Err(McpError::Timeout(30000)),
+        match tokio::time::timeout(std::time::Duration::from_secs(30), rx).await {
+            Ok(Ok(response)) => Ok(response),
+            Ok(Err(_)) => Err(McpError::TransportError("Response channel closed".to_string())),
+            Err(_) => {
+                self.pending.remove(&request_id);
+                Err(McpError::Timeout(30000))
+            }
         }
     }
 
@@ -185,6 +246,9 @@ impl Transport for SseTransport {
         if !self.is_connected().await {
             return Err(McpError::TransportError("Transport not connected".to_string()));
         }
+
+        let mut request = request;
+        request.id = None;
 
         let json = serde_json::to_string(&request)?;
         debug!("Sending SSE notification: {}", json);
@@ -225,6 +289,7 @@ impl Transport for SseTransport {
         }
 
         *self.is_connected.write().await = false;
+        self.pending.clear();
         Ok(())
     }
 }

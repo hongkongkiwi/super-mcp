@@ -2,31 +2,28 @@
 //!
 //! Provides bidirectional streaming communication over WebSocket.
 
-use crate::core::protocol::{JsonRpcRequest, JsonRpcResponse};
+use crate::core::protocol::{JsonRpcRequest, JsonRpcResponse, RequestId};
+use crate::core::SharedRequestIdGenerator;
 use crate::transport::traits::Transport;
 use crate::utils::errors::{McpError, McpResult};
 use async_trait::async_trait;
+use dashmap::DashMap;
 use futures::{SinkExt, StreamExt};
 use std::sync::Arc;
-use tokio::net::TcpStream;
-use tokio::sync::{mpsc, Mutex, RwLock};
-use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
-use tracing::{debug, error, info, warn};
+use tokio::sync::{mpsc, oneshot, RwLock};
+use tokio_tungstenite::{connect_async, tungstenite::Message};
+use tracing::{debug, error, info};
 use url::Url;
 
 /// WebSocket transport for MCP servers
 pub struct WebSocketTransport {
-    /// WebSocket URL
-    url: Url,
-    /// WebSocket stream
-    ws_stream: Arc<Mutex<WebSocketStream<MaybeTlsStream<TcpStream>>>>,
-    /// Response channel
-    response_tx: mpsc::Sender<JsonRpcResponse>,
-    response_rx: Arc<Mutex<mpsc::Receiver<JsonRpcResponse>>>,
+    /// Pending requests keyed by id
+    pending: Arc<DashMap<RequestId, oneshot::Sender<JsonRpcResponse>>>,
     /// Connection status
     is_connected: Arc<RwLock<bool>>,
     /// Write handle for sending messages
     write_tx: mpsc::Sender<Message>,
+    request_id_gen: SharedRequestIdGenerator,
 }
 
 impl WebSocketTransport {
@@ -45,11 +42,12 @@ impl WebSocketTransport {
 
         let (write, read) = ws_stream.split();
 
-        let (response_tx, response_rx) = mpsc::channel(100);
         let (write_tx, mut write_rx) = mpsc::channel::<Message>(100);
 
         let is_connected = Arc::new(RwLock::new(true));
         let is_connected_clone = is_connected.clone();
+        let pending: Arc<DashMap<RequestId, oneshot::Sender<JsonRpcResponse>>> =
+            Arc::new(DashMap::new());
 
         // Spawn writer task
         let mut write = write;
@@ -64,7 +62,7 @@ impl WebSocketTransport {
         });
 
         // Spawn reader task
-        let response_tx_clone = response_tx.clone();
+        let pending_clone = pending.clone();
         let is_connected_clone2 = is_connected.clone();
         tokio::spawn(async move {
             let mut read = read;
@@ -77,9 +75,14 @@ impl WebSocketTransport {
                             // Try to parse as response
                             match serde_json::from_str::<JsonRpcResponse>(&text) {
                                 Ok(response) => {
-                                    if let Err(e) = response_tx_clone.send(response).await {
-                                        error!("Failed to send response: {}", e);
-                                        break;
+                                    if let Some(id) = response.id.clone() {
+                                        if let Some((_, tx)) = pending_clone.remove(&id) {
+                                            let _ = tx.send(response);
+                                        } else {
+                                            debug!("Received WebSocket response with unknown id: {:?}", id);
+                                        }
+                                    } else {
+                                        debug!("Received WebSocket response without id, ignoring");
                                     }
                                 }
                                 Err(e) => {
@@ -95,24 +98,15 @@ impl WebSocketTransport {
                 }
             }
             *is_connected_clone2.write().await = false;
+            pending_clone.clear();
             info!("WebSocket reader task ended");
         });
 
-        // Reconstruct the WebSocketStream (simplified - in production would need proper handling)
-        // For now, we store the write channel
-        let ws_stream = Arc::new(Mutex::new(
-            connect_async(url.as_str()).await.map_err(|e| {
-                McpError::TransportError(format!("Failed to reconnect: {}", e))
-            })?.0
-        ));
-
         let transport = Self {
-            url,
-            ws_stream,
-            response_tx,
-            response_rx: Arc::new(Mutex::new(response_rx)),
+            pending,
             is_connected,
             write_tx,
+            request_id_gen: SharedRequestIdGenerator::new(),
         };
 
         // Send initialize request
@@ -145,12 +139,6 @@ impl WebSocketTransport {
         Ok(())
     }
 
-    /// Build WebSocket request URL with session ID if present
-    fn build_request_url(&self, _session_id: Option<String>) -> String {
-        // For WebSocket, we don't add query params to the URL
-        // Session management would be done via messages
-        self.url.to_string()
-    }
 }
 
 #[async_trait]
@@ -160,20 +148,34 @@ impl Transport for WebSocketTransport {
             return Err(McpError::TransportError("WebSocket not connected".to_string()));
         }
 
+        let mut request = request;
+        if request.id.is_none() {
+            request.id = Some(self.request_id_gen.next_id());
+        }
+        let request_id = request
+            .id
+            .clone()
+            .ok_or_else(|| McpError::InvalidRequest("Missing request id".to_string()))?;
+
+        let (tx, rx) = oneshot::channel();
+        self.pending.insert(request_id.clone(), tx);
+
         let json = serde_json::to_string(&request)?;
         debug!("WebSocket sending: {}", json);
 
-        self.write_tx
-            .send(Message::Text(json.into()))
-            .await
-            .map_err(|e| McpError::TransportError(format!("Failed to send: {}", e)))?;
+        if let Err(e) = self.write_tx.send(Message::Text(json.into())).await {
+            self.pending.remove(&request_id);
+            return Err(McpError::TransportError(format!("Failed to send: {}", e)));
+        }
 
         // Wait for response
-        let mut rx = self.response_rx.lock().await;
-        match tokio::time::timeout(std::time::Duration::from_secs(30), rx.recv()).await {
-            Ok(Some(response)) => Ok(response),
-            Ok(None) => Err(McpError::TransportError("Response channel closed".to_string())),
-            Err(_) => Err(McpError::Timeout(30000)),
+        match tokio::time::timeout(std::time::Duration::from_secs(30), rx).await {
+            Ok(Ok(response)) => Ok(response),
+            Ok(Err(_)) => Err(McpError::TransportError("Response channel closed".to_string())),
+            Err(_) => {
+                self.pending.remove(&request_id);
+                Err(McpError::Timeout(30000))
+            }
         }
     }
 
@@ -181,6 +183,9 @@ impl Transport for WebSocketTransport {
         if !self.is_connected().await {
             return Err(McpError::TransportError("WebSocket not connected".to_string()));
         }
+
+        let mut request = request;
+        request.id = None;
 
         let json = serde_json::to_string(&request)?;
         debug!("WebSocket sending notification: {}", json);
@@ -204,6 +209,7 @@ impl Transport for WebSocketTransport {
         let _ = self.write_tx.send(Message::Close(None)).await;
 
         *self.is_connected.write().await = false;
+        self.pending.clear();
         Ok(())
     }
 }

@@ -202,12 +202,43 @@ impl ConfigValidator {
                         message: "JWT auth requires an issuer".to_string(),
                     });
                 }
+                if config.auth.jwt_secret.is_none() {
+                    errors.push(ValidationError {
+                        path: "auth.jwt_secret".to_string(),
+                        message: "JWT auth requires a jwt_secret".to_string(),
+                    });
+                }
             }
             AuthType::OAuth => {
                 if config.auth.client_id.is_none() {
                     errors.push(ValidationError {
                         path: "auth.client_id".to_string(),
                         message: "OAuth auth requires a client_id".to_string(),
+                    });
+                }
+                if config.auth.client_secret.is_none() {
+                    errors.push(ValidationError {
+                        path: "auth.client_secret".to_string(),
+                        message: "OAuth auth requires a client_secret".to_string(),
+                    });
+                }
+                if config.auth.issuer.is_none()
+                    && (config.auth.auth_url.is_none() || config.auth.token_url.is_none())
+                {
+                    errors.push(ValidationError {
+                        path: "auth.issuer".to_string(),
+                        message: "OAuth auth requires either issuer or auth_url + token_url".to_string(),
+                    });
+                }
+                if config.auth.introspection_url.is_none()
+                    && config.auth.userinfo_url.is_none()
+                    && config.auth.jwks_url.is_none()
+                    && config.auth.issuer.is_none()
+                    && !config.auth.allow_unverified_jwt
+                {
+                    errors.push(ValidationError {
+                        path: "auth".to_string(),
+                        message: "OAuth auth requires jwks_url, introspection_url, or userinfo_url (or allow_unverified_jwt=true)".to_string(),
                     });
                 }
             }

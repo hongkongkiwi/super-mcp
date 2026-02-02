@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tokio::fs::{File, OpenOptions};
 use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 /// Type of audit event
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

@@ -5,14 +5,15 @@ use crate::config::{Config, McpServerConfig, SandboxConfig};
 use crate::registry::{RegistryClient, RegistryEntry};
 use crate::registry::types::RegistryConfig;
 use crate::utils::errors::{McpError, McpResult};
+use shellexpand::tilde;
+use std::io::{self, Write};
 use std::path::PathBuf;
 
 fn create_registry_config(config: &Config) -> RegistryConfig {
+    let cache_dir = tilde(&config.registry.cache_dir).to_string();
     RegistryConfig {
         url: config.registry.url.clone(),
-        cache_dir: dirs::cache_dir()
-            .map(|p| p.join("super-mcp/registry"))
-            .unwrap_or_else(|| PathBuf::from(".cache/super-mcp/registry")),
+        cache_dir: PathBuf::from(cache_dir),
         cache_ttl_hours: config.registry.cache_ttl_hours,
     }
 }
@@ -86,6 +87,15 @@ pub async fn install(config_path: &str, name: &str) -> McpResult<()> {
     match client.install(name).await {
         Ok(entry) => {
             println!("✓ Found server: {} v{}", entry.name, entry.version);
+
+            if let Some(cmd) = &entry.install_command {
+                println!("\nRegistry install command:\n  {}", cmd);
+                if confirm_install()? {
+                    run_install_command(cmd).await?;
+                } else {
+                    println!("Skipped install command.");
+                }
+            }
 
             // Load existing config or create new
             let mut config = if path.exists() {
@@ -211,6 +221,40 @@ fn print_entry_summary(entry: &RegistryEntry) {
     println!("    {}", entry.description);
     println!("    Tags: {}", entry.tags.join(", "));
     println!("    Author: {} | License: {}", entry.author, entry.license);
+}
+
+fn confirm_install() -> McpResult<bool> {
+    print!("Run install command now? [y/N]: ");
+    io::stdout().flush().map_err(McpError::Io)?;
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).map_err(McpError::Io)?;
+    let input = input.trim().to_lowercase();
+    Ok(matches!(input.as_str(), "y" | "yes"))
+}
+
+async fn run_install_command(install_cmd: &str) -> McpResult<()> {
+    let parts = shell_words::split(install_cmd)
+        .map_err(|e| McpError::ConfigError(format!("Invalid install command: {}", e)))?;
+    if parts.is_empty() {
+        return Err(McpError::ConfigError("Empty install command".to_string()));
+    }
+
+    let output = tokio::process::Command::new(&parts[0])
+        .args(&parts[1..])
+        .output()
+        .await
+        .map_err(McpError::Io)?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(McpError::InternalError(format!(
+            "Install command failed: {}",
+            stderr
+        )));
+    }
+
+    Ok(())
 }
 
 fn print_entry_details(entry: &RegistryEntry) {

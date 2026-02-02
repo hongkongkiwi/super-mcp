@@ -1,6 +1,6 @@
 use crate::config::Config;
 use crate::utils::errors::{McpError, McpResult};
-use notify::{Event, RecommendedWatcher};
+use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use parking_lot::RwLock;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -31,25 +31,31 @@ impl ConfigManager {
         let config_clone = config.clone();
         let path_clone = path.clone();
 
+        let rt_handle = tokio::runtime::Handle::try_current()
+            .map_err(|e| McpError::ConfigError(format!("No Tokio runtime available: {}", e)))?;
         let watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
             match res {
                 Ok(event) => {
                     if event.kind.is_modify() {
                         info!("Config file changed, reloading...");
-                        let rt = tokio::runtime::Handle::current();
-                        let new_config = rt.block_on(Self::load_config(&path_clone));
+                        let config_clone = config_clone.clone();
+                        let event_tx_clone = event_tx_clone.clone();
+                        let path_clone = path_clone.clone();
+                        let rt = rt_handle.clone();
 
-                        match new_config {
-                            Ok(new_config) => {
-                                *config_clone.write() = new_config;
-                                let _ = event_tx_clone.send(ConfigEvent::Reloaded);
+                        rt.spawn(async move {
+                            match Self::load_config(&path_clone).await {
+                                Ok(new_config) => {
+                                    *config_clone.write() = new_config;
+                                    let _ = event_tx_clone.send(ConfigEvent::Reloaded);
+                                }
+                                Err(e) => {
+                                    error!("Failed to reload config: {}", e);
+                                    let _ = event_tx_clone
+                                        .send(ConfigEvent::Error(e.to_string()));
+                                }
                             }
-                            Err(e) => {
-                                error!("Failed to reload config: {}", e);
-                                let _ = event_tx_clone
-                                    .send(ConfigEvent::Error(e.to_string()));
-                            }
-                        }
+                        });
                     }
                 }
                 Err(e) => {
@@ -84,8 +90,9 @@ impl ConfigManager {
     }
 
     async fn start_watching(&mut self) -> McpResult<()> {
-        // Watcher is already created, just need to watch the path
-        // This is handled by the watcher itself
+        self._watcher
+            .watch(&self.path, RecursiveMode::NonRecursive)
+            .map_err(|e| McpError::ConfigError(e.to_string()))?;
         Ok(())
     }
 

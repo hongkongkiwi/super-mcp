@@ -137,40 +137,16 @@ impl RegistryClient {
         Ok(Some(entry))
     }
 
-    /// Install a server from the registry
+    /// Fetch a server entry from the registry
     pub async fn install(&self, name: &str) -> McpResult<RegistryEntry> {
-        info!("Installing server from registry: {}", name);
+        info!("Fetching server from registry: {}", name);
 
         let entry = self
             .get_info(name)
             .await?
             .ok_or_else(|| McpError::ServerNotFound(format!("Server '{}' not found in registry", name)))?;
 
-        // Run install command if provided
-        if let Some(install_cmd) = &entry.install_command {
-            info!("Running install command: {}", install_cmd);
-
-            let parts: Vec<_> = install_cmd.split_whitespace().collect();
-            if parts.is_empty() {
-                return Err(McpError::ConfigError("Empty install command".to_string()));
-            }
-
-            let output = tokio::process::Command::new(parts[0])
-                .args(&parts[1..])
-                .output()
-                .await
-                .map_err(|e| McpError::Io(e))?;
-
-            if !output.status.success() {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                return Err(McpError::InternalError(format!(
-                    "Install command failed: {}",
-                    stderr
-                )));
-            }
-        }
-
-        info!("Successfully installed server: {}", name);
+        info!("Fetched registry entry for server: {}", name);
         Ok(entry)
     }
 

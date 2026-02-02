@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// JSON-RPC 2.0 request
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,7 +35,7 @@ pub struct JsonRpcError {
 }
 
 /// Request ID can be string or number
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(untagged)]
 pub enum RequestId {
     String(String),
@@ -115,7 +116,7 @@ impl JsonRpcRequest {
     pub fn new(method: impl Into<String>, params: Option<Value>) -> Self {
         Self {
             jsonrpc: "2.0".to_string(),
-            id: Some(RequestId::Number(1)),
+            id: Some(next_request_id()),
             method: method.into(),
             params,
         }
@@ -134,6 +135,11 @@ impl JsonRpcRequest {
     pub fn is_notification(&self) -> bool {
         self.id.is_none()
     }
+}
+
+fn next_request_id() -> RequestId {
+    static REQUEST_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
+    RequestId::Number(REQUEST_ID_COUNTER.fetch_add(1, Ordering::SeqCst) as i64)
 }
 
 impl JsonRpcResponse {

@@ -3,19 +3,35 @@ use crate::auth::provider::{AuthProvider, Session, Tokens};
 use crate::utils::errors::{McpError, McpResult};
 use async_trait::async_trait;
 use chrono::Utc;
+use jsonwebtoken::{decode, decode_header, jwk::JwkSet, Algorithm, DecodingKey, Validation};
 use oauth2::{
     basic::BasicClient, reqwest::async_http_client, AuthUrl, AuthorizationCode, ClientId,
     ClientSecret, CsrfToken, RedirectUrl, RefreshToken, Scope, TokenResponse, TokenUrl,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::sync::Arc;
-use tracing::{debug, error, info};
+use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
+use tracing::{debug, info};
 
 /// OAuth 2.1 authentication provider
 pub struct OAuthAuth {
     client: Arc<BasicClient>,
     introspection_url: Option<String>,
     userinfo_url: Option<String>,
+    allow_unverified_jwt: bool,
+    jwks_url: Option<String>,
+    jwks_cache: Arc<RwLock<Option<JwksCache>>>,
+    jwks_cache_ttl: Duration,
+    expected_audiences: Vec<String>,
+    allowed_algs: Vec<Algorithm>,
+    issuer: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct JwksCache {
+    fetched_at: Instant,
+    jwks: Arc<JwkSet>,
 }
 
 /// OAuth token introspection response
@@ -47,18 +63,6 @@ struct UserInfoResponse {
     name: Option<String>,
 }
 
-/// OAuth token exchange request
-#[derive(Debug, Serialize)]
-struct TokenExchangeRequest {
-    grant_type: String,
-    code: String,
-    redirect_uri: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    client_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    client_secret: Option<String>,
-}
-
 impl OAuthAuth {
     /// Create a new OAuth authentication provider
     pub fn new(
@@ -78,6 +82,13 @@ impl OAuthAuth {
             client: Arc::new(client),
             introspection_url: None,
             userinfo_url: None,
+            allow_unverified_jwt: false,
+            jwks_url: None,
+            jwks_cache: Arc::new(RwLock::new(None)),
+            jwks_cache_ttl: Duration::from_secs(300),
+            expected_audiences: Vec::new(),
+            allowed_algs: Vec::new(),
+            issuer: None,
         })
     }
 
@@ -130,10 +141,23 @@ impl OAuthAuth {
             .get("userinfo_endpoint")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
+
+        let jwks_url = discovery
+            .get("jwks_uri")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let issuer_from_discovery = discovery
+            .get("issuer")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| issuer.clone());
         
         let mut oauth = Self::new(client_id, client_secret, auth_url, token_url)?;
         oauth.introspection_url = introspection_url;
         oauth.userinfo_url = userinfo_url;
+        oauth.jwks_url = jwks_url;
+        oauth.issuer = Some(issuer_from_discovery);
         
         info!("OAuth provider configured from discovery endpoint");
         Ok(oauth)
@@ -159,6 +183,42 @@ impl OAuthAuth {
     /// Set the userinfo URL
     pub fn with_userinfo_url(mut self, url: impl Into<String>) -> Self {
         self.userinfo_url = Some(url.into());
+        self
+    }
+
+    /// Set the JWKS URL for JWT validation
+    pub fn with_jwks_url(mut self, url: impl Into<String>) -> Self {
+        self.jwks_url = Some(url.into());
+        self
+    }
+
+    /// Set expected audiences for JWT validation
+    pub fn with_expected_audiences(mut self, audiences: Vec<String>) -> Self {
+        self.expected_audiences = audiences;
+        self
+    }
+
+    /// Set allowed JWT algorithms for JWKS validation
+    pub fn with_allowed_algs(mut self, algs: Vec<Algorithm>) -> Self {
+        self.allowed_algs = algs;
+        self
+    }
+
+    /// Set JWKS cache TTL
+    pub fn with_jwks_cache_ttl(mut self, ttl: Duration) -> Self {
+        self.jwks_cache_ttl = ttl;
+        self
+    }
+
+    /// Set expected token issuer for JWT validation
+    pub fn with_issuer(mut self, issuer: impl Into<String>) -> Self {
+        self.issuer = Some(issuer.into());
+        self
+    }
+
+    /// Allow unverified JWT parsing (unsafe; for dev/testing only)
+    pub fn with_allow_unverified_jwt(mut self, allow: bool) -> Self {
+        self.allow_unverified_jwt = allow;
         self
     }
 
@@ -257,6 +317,140 @@ impl OAuthAuth {
         Ok(userinfo)
     }
 
+    async fn fetch_jwks(&self) -> McpResult<Arc<JwkSet>> {
+        let url = self
+            .jwks_url
+            .as_ref()
+            .ok_or_else(|| McpError::AuthError("JWKS URL not configured".to_string()))?;
+
+        let client = reqwest::Client::new();
+        let response = client
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| McpError::TransportError(format!("JWKS request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            return Err(McpError::AuthError(format!(
+                "JWKS returned error: {}",
+                response.status()
+            )));
+        }
+
+        let jwks: JwkSet = response
+            .json()
+            .await
+            .map_err(|e| McpError::InternalError(format!("Failed to parse JWKS response: {}", e)))?;
+
+        Ok(Arc::new(jwks))
+    }
+
+    async fn get_jwks(&self, force_refresh: bool) -> McpResult<Arc<JwkSet>> {
+        if !force_refresh && !self.jwks_cache_ttl.is_zero() {
+            let cache = self.jwks_cache.read().await;
+            if let Some(cached) = cache.as_ref() {
+                if cached.fetched_at.elapsed() < self.jwks_cache_ttl {
+                    return Ok(Arc::clone(&cached.jwks));
+                }
+            }
+        }
+
+        let jwks = self.fetch_jwks().await?;
+        let mut cache = self.jwks_cache.write().await;
+        *cache = Some(JwksCache {
+            fetched_at: Instant::now(),
+            jwks: Arc::clone(&jwks),
+        });
+        Ok(jwks)
+    }
+
+    fn build_jwt_validation(&self, allowed_algs: &[Algorithm]) -> Validation {
+        let mut validation = Validation::new(
+            *allowed_algs
+                .first()
+                .unwrap_or(&Algorithm::RS256),
+        );
+        validation.algorithms = allowed_algs.to_vec();
+
+        if let Some(issuer) = &self.issuer {
+            if !issuer.is_empty() {
+                validation.set_issuer(&[issuer.clone()]);
+            }
+        }
+
+        if !self.expected_audiences.is_empty() {
+            validation.set_audience(&self.expected_audiences);
+        }
+
+        validation
+    }
+
+    async fn validate_with_jwks(
+        &self,
+        token: &str,
+        header: &jsonwebtoken::Header,
+    ) -> McpResult<Session> {
+        let allowed_algs = if self.allowed_algs.is_empty() {
+            vec![Algorithm::RS256]
+        } else {
+            self.allowed_algs.clone()
+        };
+
+        if !allowed_algs.contains(&header.alg) {
+            return Err(McpError::AuthError(format!(
+                "Disallowed JWT algorithm: {:?}",
+                header.alg
+            )));
+        }
+
+        let validation = self.build_jwt_validation(&allowed_algs);
+
+        let jwks = self.get_jwks(false).await?;
+        let claims = if let Some(kid) = header.kid.as_deref() {
+            if let Some(jwk) = jwks.find(kid) {
+                Self::decode_with_jwk(token, jwk, &validation)?
+            } else {
+                let refreshed = self.get_jwks(true).await?;
+                let jwk = refreshed.find(kid).ok_or_else(|| {
+                    McpError::AuthError(format!("No matching JWK found for kid {}", kid))
+                })?;
+                Self::decode_with_jwk(token, jwk, &validation)?
+            }
+        } else {
+            if jwks.keys.len() != 1 {
+                return Err(McpError::AuthError(
+                    "JWT kid is missing and JWKS has multiple keys".to_string(),
+                ));
+            }
+            let jwk = jwks.keys.first().ok_or_else(|| {
+                McpError::AuthError("JWKS did not contain any keys".to_string())
+            })?;
+            Self::decode_with_jwk(token, jwk, &validation)?
+        };
+
+        let (user_id, scopes) = Self::extract_from_claims(&claims);
+        let expires_at = Self::extract_expiration(&claims);
+
+        Ok(Session {
+            user_id,
+            token: token.to_string(),
+            scopes,
+            expires_at,
+        })
+    }
+
+    fn decode_with_jwk(
+        token: &str,
+        jwk: &jsonwebtoken::jwk::Jwk,
+        validation: &Validation,
+    ) -> McpResult<serde_json::Value> {
+        let key = DecodingKey::from_jwk(jwk)
+            .map_err(|e| McpError::AuthError(format!("Invalid JWK: {}", e)))?;
+        let data = decode::<serde_json::Value>(token, &key, validation)
+            .map_err(|e| McpError::AuthError(format!("JWT verification failed: {}", e)))?;
+        Ok(data.claims)
+    }
+
     /// Parse JWT token without verification (for extracting claims)
     fn parse_jwt_claims(token: &str) -> Option<serde_json::Value> {
         let parts: Vec<&str> = token.split('.').collect();
@@ -267,14 +461,8 @@ impl OAuthAuth {
         // Decode base64 payload
         use base64::Engine;
         let payload = parts[1];
-        // Add padding if needed
-        let padded = match payload.len() % 4 {
-            0 => payload.to_string(),
-            n => format!("{}{}", payload, "=".repeat(4 - n)),
-        };
-
-        let decoded = base64::engine::general_purpose::STANDARD
-            .decode(&padded)
+        let decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(payload)
             .ok()?;
 
         serde_json::from_slice(&decoded).ok()
@@ -322,62 +510,90 @@ impl AuthProvider for OAuthAuth {
     async fn validate_token(&self, token: &str) -> McpResult<Session> {
         debug!("Validating OAuth token");
 
+        if self.jwks_url.is_some() {
+            match decode_header(token) {
+                Ok(header) => {
+                    let session = self.validate_with_jwks(token, &header).await?;
+                    return Ok(session);
+                }
+                Err(_) => {
+                    debug!("Token is not a JWT; skipping JWKS validation");
+                }
+            }
+        }
+
         // Try introspection first if available
         if self.introspection_url.is_some() {
-            match self.introspect_token(token).await {
-                Ok(introspection) => {
-                    if !introspection.active {
-                        return Err(McpError::AuthError("Token is not active".to_string()));
-                    }
-
-                    let user_id = introspection
-                        .sub
-                        .or(introspection.username)
-                        .or(introspection.client_id)
-                        .unwrap_or_else(|| "unknown".to_string());
-
-                    let scopes = introspection
-                        .scope
-                        .map(|s| s.split_whitespace().map(|s| s.to_string()).collect())
-                        .unwrap_or_default();
-
-                    let expires_at = introspection
-                        .exp
-                        .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0));
-
-                    return Ok(Session {
-                        user_id,
-                        token: token.to_string(),
-                        scopes,
-                        expires_at,
-                    });
-                }
-                Err(e) => {
-                    error!("Token introspection failed, falling back to JWT parsing: {}", e);
-                }
+            let introspection = self.introspect_token(token).await?;
+            if !introspection.active {
+                return Err(McpError::AuthError("Token is not active".to_string()));
             }
+
+            let user_id = introspection
+                .sub
+                .or(introspection.username)
+                .or(introspection.client_id)
+                .unwrap_or_else(|| "unknown".to_string());
+
+            let scopes = introspection
+                .scope
+                .map(|s| s.split_whitespace().map(|s| s.to_string()).collect())
+                .unwrap_or_default();
+
+            let expires_at = introspection
+                .exp
+                .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0));
+
+            return Ok(Session {
+                user_id,
+                token: token.to_string(),
+                scopes,
+                expires_at,
+            });
         }
 
-        // Fallback: Parse JWT claims directly
-        let claims = Self::parse_jwt_claims(token)
-            .ok_or_else(|| McpError::AuthError("Invalid token format".to_string()))?;
+        // Fallback: userinfo endpoint (validates token on provider side)
+        if self.userinfo_url.is_some() {
+            let userinfo = self.get_userinfo(token).await?;
+            let user_id = userinfo
+                .sub
+                .or(userinfo.preferred_username)
+                .or(userinfo.email)
+                .or(userinfo.name)
+                .unwrap_or_else(|| "unknown".to_string());
 
-        let (user_id, scopes) = Self::extract_from_claims(&claims);
-        let expires_at = Self::extract_expiration(&claims);
-
-        // Check if token is expired
-        if let Some(exp) = expires_at {
-            if exp < Utc::now() {
-                return Err(McpError::AuthError("Token has expired".to_string()));
-            }
+            return Ok(Session {
+                user_id,
+                token: token.to_string(),
+                scopes: Vec::new(),
+                expires_at: None,
+            });
         }
 
-        Ok(Session {
-            user_id,
-            token: token.to_string(),
-            scopes,
-            expires_at,
-        })
+        if self.allow_unverified_jwt {
+            let claims = Self::parse_jwt_claims(token)
+                .ok_or_else(|| McpError::AuthError("Invalid token format".to_string()))?;
+
+            let (user_id, scopes) = Self::extract_from_claims(&claims);
+            let expires_at = Self::extract_expiration(&claims);
+
+            if let Some(exp) = expires_at {
+                if exp < Utc::now() {
+                    return Err(McpError::AuthError("Token has expired".to_string()));
+                }
+            }
+
+            return Ok(Session {
+                user_id,
+                token: token.to_string(),
+                scopes,
+                expires_at,
+            });
+        }
+
+        Err(McpError::AuthError(
+            "No OAuth token validation method configured".to_string(),
+        ))
     }
 
     async fn refresh_token(&self, refresh_token: &str) -> McpResult<Tokens> {

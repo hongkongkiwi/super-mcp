@@ -170,47 +170,34 @@ impl LinuxSandboxFull {
         }
     }
 
-    /// Check if namespaces are supported
+    /// Check if namespaces are supported (non-invasive check)
     fn check_namespace_support() -> NamespaceSupport {
-        // Try to unshare with all namespace flags to check support
-        let test_flags = CloneFlags::CLONE_NEWNS
-            | CloneFlags::CLONE_NEWPID
-            | CloneFlags::CLONE_NEWIPC
-            | CloneFlags::CLONE_NEWNET
-            | CloneFlags::CLONE_NEWUTS;
+        let ns_dir = std::path::Path::new("/proc/self/ns");
+        if !ns_dir.exists() {
+            return NamespaceSupport::None;
+        }
 
-        match unshare(test_flags) {
-            Ok(_) => {
-                // Namespaces are supported
-                NamespaceSupport::Full
+        let mut supported = Vec::new();
+        let mappings = [
+            ("mount", "mnt"),
+            ("pid", "pid"),
+            ("ipc", "ipc"),
+            ("net", "net"),
+            ("uts", "uts"),
+        ];
+
+        for (name, entry) in mappings {
+            if ns_dir.join(entry).exists() {
+                supported.push(name.to_string());
             }
-            Err(e) => {
-                warn!("Namespace support check failed: {}", e);
-                // Try individual namespaces
-                let mut supported = Vec::new();
+        }
 
-                if unshare(CloneFlags::CLONE_NEWNS).is_ok() {
-                    supported.push("mount");
-                }
-                if unshare(CloneFlags::CLONE_NEWPID).is_ok() {
-                    supported.push("pid");
-                }
-                if unshare(CloneFlags::CLONE_NEWIPC).is_ok() {
-                    supported.push("ipc");
-                }
-                if unshare(CloneFlags::CLONE_NEWNET).is_ok() {
-                    supported.push("net");
-                }
-                if unshare(CloneFlags::CLONE_NEWUTS).is_ok() {
-                    supported.push("uts");
-                }
-
-                if supported.is_empty() {
-                    NamespaceSupport::None
-                } else {
-                    NamespaceSupport::Partial(supported.iter().map(|s| s.to_string()).collect())
-                }
-            }
+        if supported.is_empty() {
+            NamespaceSupport::None
+        } else if supported.len() == mappings.len() {
+            NamespaceSupport::Full
+        } else {
+            NamespaceSupport::Partial(supported)
         }
     }
 }

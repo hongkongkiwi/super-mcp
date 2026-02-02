@@ -150,15 +150,7 @@ pub fn apply_landlock_restrictions(
 ///
 /// Returns true if Landlock is supported by the kernel and can be used.
 pub fn is_landlock_available() -> bool {
-    match Ruleset::default().restrict_self() {
-        Ok(status) => {
-            matches!(
-                status.ruleset,
-                RulesetStatus::FullyEnforced | RulesetStatus::PartiallyEnforced
-            )
-        }
-        Err(_) => false,
-    }
+    landlock_supported_by_kernel()
 }
 
 /// Get detailed Landlock availability information
@@ -167,14 +159,20 @@ pub fn is_landlock_available() -> bool {
 /// - available: Landlock can be used (may be partial)
 /// - fully_supported: Landlock is fully supported by the kernel
 pub fn get_landlock_status() -> (bool, bool) {
-    match Ruleset::default().restrict_self() {
-        Ok(status) => match status.ruleset {
-            RulesetStatus::FullyEnforced => (true, true),
-            RulesetStatus::PartiallyEnforced => (true, false),
-            RulesetStatus::NotEnforced => (false, false),
-        },
-        Err(_) => (false, false),
+    let available = landlock_supported_by_kernel();
+    (available, false)
+}
+
+fn landlock_supported_by_kernel() -> bool {
+    if std::path::Path::new("/proc/self/attr/landlock").exists() {
+        return true;
     }
+
+    if let Ok(lsm) = std::fs::read_to_string("/sys/kernel/security/lsm") {
+        return lsm.split(',').any(|entry| entry.trim() == "landlock");
+    }
+
+    false
 }
 
 /// Apply Landlock restrictions with a specific set of access rights

@@ -1,8 +1,7 @@
 //! Request/Response size limit middleware
 
 use axum::{
-    body::Body,
-    extract::Request,
+    extract::{Request, State},
     http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
@@ -81,7 +80,7 @@ impl IntoResponse for SizeLimitError {
 
 /// Size limit middleware
 pub async fn size_limit_middleware(
-    config: SizeLimitConfig,
+    State(config): State<SizeLimitConfig>,
     request: Request,
     next: Next,
 ) -> Result<Response, SizeLimitError> {

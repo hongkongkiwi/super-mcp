@@ -5,7 +5,7 @@
 use crate::config::{Config as SuperMcpConfig, McpServerConfig, SandboxConfig, AuthConfig, FeaturesConfig};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// 1MCP configuration format
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -193,6 +193,18 @@ impl OneMcpConfigAdapter {
             token: auth.static_token.clone(),
             issuer: auth.oauth_issuer.clone(),
             client_id: auth.oauth_client_id.clone(),
+            client_secret: None,
+            jwt_secret: auth.jwt_secret.clone(),
+            auth_url: None,
+            token_url: None,
+            introspection_url: None,
+            userinfo_url: None,
+            jwks_url: None,
+            expected_audiences: Vec::new(),
+            allowed_algs: Vec::new(),
+            jwks_cache_ttl_seconds: 300,
+            allow_unverified_jwt: false,
+            required_scopes: Vec::new(),
         }
     }
 

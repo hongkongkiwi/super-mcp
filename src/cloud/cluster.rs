@@ -7,10 +7,10 @@ use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::time::interval;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 /// Cluster node information
@@ -134,8 +134,6 @@ struct ClusterState {
     term: u64,
     /// Last vote cast
     voted_for: Option<String>,
-    /// Last state change
-    last_change: Instant,
 }
 
 impl ClusterManager {
@@ -152,7 +150,6 @@ impl ClusterManager {
             state: Arc::new(RwLock::new(ClusterState {
                 term: 0,
                 voted_for: None,
-                last_change: Instant::now(),
             })),
         };
 

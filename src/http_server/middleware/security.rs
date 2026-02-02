@@ -4,8 +4,7 @@
 //! common web vulnerabilities.
 
 use axum::{
-    body::Body,
-    extract::Request,
+    extract::{Request, State},
     http::header::{self, HeaderValue},
     middleware::Next,
     response::Response,
@@ -155,7 +154,7 @@ impl ReferrerPolicy {
 
 /// Security headers middleware
 pub async fn security_headers_middleware(
-    config: SecurityHeadersConfig,
+    State(config): State<SecurityHeadersConfig>,
     request: Request,
     next: Next,
 ) -> Response {
@@ -199,7 +198,7 @@ pub async fn security_headers_middleware(
 
     // Referrer-Policy
     headers.insert(
-        header::REFERER_POLICY,
+        header::REFERRER_POLICY,
         config.referrer_policy.to_header_value(),
     );
 
@@ -210,9 +209,6 @@ pub async fn security_headers_middleware(
         }
     }
 
-    // Additional security headers
-    headers.insert("x-content-type-options", HeaderValue::from_static("nosniff"));
-    
     response
 }
 

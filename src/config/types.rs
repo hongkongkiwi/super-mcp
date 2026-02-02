@@ -47,10 +47,23 @@ impl Default for ServerConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct AuthConfig {
+    #[serde(rename = "type", alias = "auth_type")]
     pub auth_type: AuthType,
     pub issuer: Option<String>,
     pub client_id: Option<String>,
+    pub client_secret: Option<String>,
     pub token: Option<String>, // For static auth
+    pub jwt_secret: Option<String>,
+    pub auth_url: Option<String>,
+    pub token_url: Option<String>,
+    pub introspection_url: Option<String>,
+    pub userinfo_url: Option<String>,
+    pub jwks_url: Option<String>,
+    pub expected_audiences: Vec<String>,
+    pub allowed_algs: Vec<String>,
+    pub jwks_cache_ttl_seconds: u64,
+    pub allow_unverified_jwt: bool,
+    pub required_scopes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -68,7 +81,19 @@ impl Default for AuthConfig {
             auth_type: AuthType::None,
             issuer: None,
             client_id: None,
+            client_secret: None,
             token: None,
+            jwt_secret: None,
+            auth_url: None,
+            token_url: None,
+            introspection_url: None,
+            userinfo_url: None,
+            jwks_url: None,
+            expected_audiences: Vec::new(),
+            allowed_algs: Vec::new(),
+            jwks_cache_ttl_seconds: 300,
+            allow_unverified_jwt: false,
+            required_scopes: Vec::new(),
         }
     }
 }

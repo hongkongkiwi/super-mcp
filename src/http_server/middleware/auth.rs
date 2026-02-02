@@ -1,7 +1,6 @@
 //! Authentication middleware for HTTP server
 
 use axum::{
-    body::Body,
     extract::{Request, State},
     http::{header, StatusCode},
     middleware::Next,
@@ -135,11 +134,11 @@ pub fn get_session(request: &Request) -> Option<&Session> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::HeaderValue;
+    use axum::body::Body;
 
     #[test]
     fn test_extract_token_valid() {
-        let mut request = Request::builder()
+        let request = Request::builder()
             .uri("/test")
             .header(header::AUTHORIZATION, "Bearer test-token-123")
             .body(Body::empty())

@@ -38,12 +38,12 @@ impl Sandbox for NoSandbox {
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
 
-        // Inherit environment if configured
-        if self.constraints.env_inherit {
+        // Inherit environment by default; clear only when disabled
+        if !self.constraints.env_inherit {
             cmd.env_clear();
-            for (key, value) in &config.env {
-                cmd.env(key, value);
-            }
+        }
+        for (key, value) in &config.env {
+            cmd.env(key, value);
         }
 
         let child = cmd.spawn()?;
