@@ -14,7 +14,7 @@ fn create_test_registry_config() -> RegistryConfig {
 #[test]
 fn test_registry_client_creation() {
     let config = create_test_registry_config();
-    let _client = RegistryClient::new(config);
+    let _client = RegistryClient::new(config).expect("Failed to create registry client");
     // Just test that it doesn't panic
 }
 
@@ -32,8 +32,8 @@ fn test_registry_config_default() {
 #[ignore]
 async fn test_registry_search() {
     let config = create_test_registry_config();
-    let client = RegistryClient::new(config);
-    
+    let client = RegistryClient::new(config).expect("Failed to create registry client");
+
     // This will fail without network, but tests the structure
     let _result = client.search("filesystem").await;
     // Result may be error if registry is not available
@@ -43,8 +43,8 @@ async fn test_registry_search() {
 #[ignore]
 async fn test_registry_info() {
     let config = create_test_registry_config();
-    let client = RegistryClient::new(config);
-    
+    let client = RegistryClient::new(config).expect("Failed to create registry client");
+
     let _result = client.get_info("filesystem").await;
     // Result depends on network and registry availability
 }
@@ -53,8 +53,8 @@ async fn test_registry_info() {
 #[ignore]
 async fn test_registry_cache_refresh() {
     let config = create_test_registry_config();
-    let client = RegistryClient::new(config);
-    
+    let client = RegistryClient::new(config).expect("Failed to create registry client");
+
     let _result = client.refresh_cache().await;
     // Result depends on network availability
 }

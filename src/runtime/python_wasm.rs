@@ -167,7 +167,7 @@ impl PythonWasmRuntime {
 
         // Wait for completion with timeout
         let timeout = Duration::from_secs(self.config.resource_limits.timeout_seconds);
-        let result = tokio::time::timeout(timeout, child.wait()).await;
+        let _result = tokio::time::timeout(timeout, child.wait()).await;
 
         let execution_time_ms = start_time.elapsed().as_millis() as u64;
 

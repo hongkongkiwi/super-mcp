@@ -13,7 +13,8 @@ use crate::sandbox::traits::{FilesystemConstraint, Sandbox, SandboxConstraints};
 use crate::utils::errors::{McpError, McpResult};
 use async_trait::async_trait;
 use nix::sched::{unshare, CloneFlags};
-use nix::unistd::Uid;
+use nix::unistd::{Gid, Group, Uid, User};
+use nix::unistd::setgroups;
 use std::os::unix::process::CommandExt;
 use tokio::process::{Child, Command};
 use tracing::{debug, info, warn};
@@ -149,9 +150,44 @@ impl LinuxSandboxFull {
             // Drop privileges if running as root
             if Uid::current().is_root() {
                 warn!("Running as root - attempting to drop privileges");
-                // In a production implementation, this would map to an unprivileged
-                // user using newuidmap/newgidmap. For now, we log a warning.
-                // TODO: Implement proper user namespace mapping
+
+                // Try to find an unprivileged user to run as
+                let unprivileged_user = User::from_name("nobody")
+                    .or_else(|_| User::from_name("nobody"))
+                    .ok()
+                    .flatten();
+
+                if let Some(user) = unprivileged_user {
+                    // Create a vector of supplementary groups for the user
+                    let supplementary_groups: Vec<Gid> = user.groups
+                        .iter()
+                        .filter(|g| g.name != "nogroup")
+                        .map(|g| g.gid)
+                        .collect();
+
+                    // Set supplementary groups first
+                    if !supplementary_groups.is_empty() {
+                        if let Err(e) = setgroups(&supplementary_groups) {
+                            warn!("Failed to set supplementary groups: {}", e);
+                        }
+                    }
+
+                    // Drop group privileges
+                    if let Err(e) = nix::unistd::setgid(Gid::from_raw(user.gid)) {
+                        warn!("Failed to set group ID: {}", e);
+                    } else {
+                        debug!("Successfully set GID to {}", user.gid);
+                    }
+
+                    // Drop user privileges
+                    if let Err(e) = nix::unistd::setuid(Uid::from_raw(user.uid)) {
+                        warn!("Failed to set user ID: {}", e);
+                    } else {
+                        debug!("Successfully set UID to {}", user.uid);
+                    }
+                } else {
+                    warn!("Could not find unprivileged user 'nobody' - running as root");
+                }
             }
 
             info!("Sandbox setup complete in pre_exec hook");

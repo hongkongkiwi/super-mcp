@@ -8,11 +8,10 @@
 //!
 //! These formats can be used interchangeably with Super MCP config.
 
-use crate::config::{Config as SuperMcpConfig, McpServerConfig, SandboxConfig, AuthConfig, ServerConfig, FeaturesConfig, PresetConfig};
+use crate::config::{Config as SuperMcpConfig, McpServerConfig, SandboxConfig, AuthConfig, PresetConfig};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::collections::HashMap;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// Presets.json format (1MCP preset configuration)
 /// Used for grouping servers by preset/tags
@@ -54,8 +53,8 @@ pub struct PresetServer {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct McpJsonConfig {
     /// MCP servers
-    #[serde(default)]
-    pub mcpServers: HashMap<String, McpServerEntry>,
+    #[serde(default, rename = "mcpServers")]
+    pub mcp_servers: HashMap<String, McpServerEntry>,
 }
 
 /// Server entry in mcp.json format
@@ -177,7 +176,7 @@ impl StandardMcpConfigAdapter {
     pub fn detect_format(content: &str) -> StandardConfigFormat {
         // Try to parse as mcp.json format first
         if let Ok(config) = serde_json::from_str::<McpJsonConfig>(content) {
-            if !config.mcpServers.is_empty() {
+            if !config.mcp_servers.is_empty() {
                 return StandardConfigFormat::McpJson;
             }
         }
@@ -226,7 +225,7 @@ impl StandardMcpConfigAdapter {
 
         let mut super_mcp = SuperMcpConfig::default();
 
-        for (name, server_config) in &config.mcpServers {
+        for (name, server_config) in &config.mcp_servers {
             if server_config.disabled {
                 debug!("Skipping disabled server: {}", name);
                 continue;
@@ -298,7 +297,7 @@ impl StandardMcpConfigAdapter {
         let mut super_mcp = SuperMcpConfig::default();
 
         // Set server name from Smithery config
-        if let Some(server) = &config.server {
+        if let Some(_server) = &config.server {
             super_mcp.server.host = "0.0.0.0".to_string();
             super_mcp.server.port = 3000;
         }
@@ -451,7 +450,7 @@ impl StandardMcpConfigAdapter {
         match format {
             StandardConfigFormat::McpJson => {
                 if let Ok(config) = serde_json::from_str::<McpJsonConfig>(content) {
-                    config.mcpServers.into_iter()
+                    config.mcp_servers.into_iter()
                         .filter(|(_, s)| !s.disabled)
                         .map(|(name, sc)| McpServerConfig {
                             name,
@@ -590,7 +589,7 @@ impl StandardMcpConfigWriter {
             mcp_servers.insert(server.name.clone(), server_config);
         }
 
-        let config_output = McpJsonConfig { mcpServers: mcp_servers };
+        let config_output = McpJsonConfig { mcp_servers: mcp_servers };
         serde_json::to_string_pretty(&config_output).unwrap_or_default()
     }
 
@@ -805,8 +804,8 @@ servers:
         let output = StandardMcpConfigWriter::to_mcp_json(&super_mcp);
         let parsed: McpJsonConfig = serde_json::from_str(&output).unwrap();
 
-        assert_eq!(parsed.mcpServers.len(), 1);
-        assert!(parsed.mcpServers.contains_key("test"));
+        assert_eq!(parsed.mcp_servers.len(), 1);
+        assert!(parsed.mcp_servers.contains_key("test"));
     }
 
     #[test]

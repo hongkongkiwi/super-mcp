@@ -15,19 +15,19 @@ pub struct RegistryClient {
 }
 
 impl RegistryClient {
-    pub fn new(config: RegistryConfig) -> Self {
+    pub fn new(config: RegistryConfig) -> McpResult<Self> {
         let cache = RegistryCache::new(&config);
 
         let client = Client::builder()
             .timeout(Duration::from_secs(30))
             .build()
-            .expect("Failed to build HTTP client");
+            .map_err(|e| McpError::TransportError(format!("Failed to build HTTP client: {}", e)))?;
 
-        Self {
+        Ok(Self {
             client,
             config,
             cache,
-        }
+        })
     }
 
     /// Search for MCP servers in the registry

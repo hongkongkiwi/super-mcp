@@ -34,7 +34,7 @@ pub async fn search(config_path: &str, query: &str) -> McpResult<()> {
         RegistryConfig::default()
     };
 
-    let client = RegistryClient::new(registry_config);
+    let client = RegistryClient::new(registry_config)?;
 
     println!("Searching registry for: '{}'...\n", query);
 
@@ -80,7 +80,7 @@ pub async fn install(config_path: &str, name: &str) -> McpResult<()> {
         RegistryConfig::default()
     };
 
-    let client = RegistryClient::new(registry_config);
+    let client = RegistryClient::new(registry_config)?;
 
     println!("Looking up '{}' in registry...", name);
 
@@ -163,7 +163,7 @@ pub async fn info(config_path: &str, name: &str) -> McpResult<()> {
         RegistryConfig::default()
     };
 
-    let client = RegistryClient::new(registry_config);
+    let client = RegistryClient::new(registry_config)?;
 
     println!("Fetching information for '{}'...\n", name);
 
@@ -200,7 +200,7 @@ pub async fn refresh(config_path: &str) -> McpResult<()> {
         RegistryConfig::default()
     };
 
-    let client = RegistryClient::new(registry_config);
+    let client = RegistryClient::new(registry_config)?;
 
     println!("Refreshing registry cache...");
 

@@ -59,6 +59,7 @@ pub struct PromptArgument {
 /// - Preset/tag filtering for tool selection
 /// - Coalescing concurrent requests for the same schema
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct LazyToolLoader {
     /// Schema cache
     cache: Arc<SchemaCache>,
@@ -171,7 +172,7 @@ impl LazyToolLoader {
         let servers = self.server_manager.list_servers();
 
         for server_name in servers {
-            if let Some(server) = self.server_manager.get_server(&server_name) {
+            if let Some(_server) = self.server_manager.get_server(&server_name) {
                 match self.fetch_tools_from_server(&server_name).await {
                     Ok(tools) => all_tools.extend(tools),
                     Err(e) => warn!("Failed to fetch tools from {}: {}", server_name, e),
@@ -261,7 +262,7 @@ impl LazyToolLoader {
 
         // Preload configured servers
         for server_name in self.preload_servers.as_ref() {
-            if let Some(server) = self.server_manager.get_server(server_name) {
+            if let Some(_server) = self.server_manager.get_server(server_name) {
                 match self.fetch_tools_from_server(server_name).await {
                     Ok(tools) => all_tools.extend(tools),
                     Err(e) => warn!("Failed to preload tools from {}: {}", server_name, e),
@@ -440,7 +441,7 @@ impl LazyToolLoader {
     /// Get a specific tool schema by name
     pub async fn get_tool_schema(&self, server_name: &str, tool_name: &str) -> McpResult<Option<ToolSchema>> {
         // Check if tool is in cached list
-        let cache_key = format!("{}:{}", server_name, tool_name);
+        let _cache_key = format!("{}:{}", server_name, tool_name);
 
         if let Some(cached) = self.cache.get(server_name, tool_name, SchemaType::Tool) {
             return Ok(Some(ToolSchema {
@@ -620,8 +621,6 @@ pub fn filter_tools_by_server(tools: &[ToolSchema], servers: &[String]) -> Vec<T
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::types::McpServerConfig;
-    use std::collections::HashMap;
 
     fn create_test_server_manager() -> Arc<ServerManager> {
         Arc::new(ServerManager::new())

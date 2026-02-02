@@ -14,7 +14,7 @@ async fn test_full_config_workflow() {
     
     // Create a complete config
     let config = Config {
-        server: super_mcp::config::ServerConfig {
+        server: supermcp::config::ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 3000,
             cert_path: None,

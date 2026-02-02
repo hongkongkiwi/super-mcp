@@ -179,7 +179,7 @@ pub enum RuntimeError {
 }
 
 /// Helper function to convert FilesystemAccess to sandbox trait type
-#[cfg(feature = "sandbox")]
+#[allow(dead_code)]
 pub fn to_sandbox_filesystem_constraint(
     access: &FilesystemAccess,
 ) -> crate::sandbox::FilesystemConstraint {
