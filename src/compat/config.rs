@@ -174,6 +174,7 @@ impl OneMcpConfigAdapter {
             tags: server.tags.clone().unwrap_or_default(),
             description: server.description.clone(),
             sandbox,
+            runner: None,
         }
     }
 

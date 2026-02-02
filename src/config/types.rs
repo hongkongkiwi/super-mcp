@@ -236,17 +236,140 @@ impl Default for LazyLoadingMode {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
 pub struct McpServerConfig {
     pub name: String,
+    /// Local binary command (e.g., "/path/to/server")
+    #[serde(default)]
     pub command: String,
+    /// Arguments for local binary
     #[serde(default)]
     pub args: Vec<String>,
+    /// Environment variables
     #[serde(default)]
     pub env: HashMap<String, String>,
+    /// Tags for categorization
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Description
     #[serde(default)]
     pub description: Option<String>,
+    /// Sandbox configuration
     #[serde(default)]
     pub sandbox: SandboxConfig,
+    /// Package runner configuration (alternative to command)
+    #[serde(default)]
+    pub runner: Option<PackageRunnerConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct PackageRunnerConfig {
+    /// Runner type (uvx, pnpm, npx, bunx, etc.)
+    pub runner: PackageRunner,
+    /// Package name to run
+    pub package: String,
+    /// Additional arguments to pass to the package
+    #[serde(default)]
+    pub args: Vec<String>,
+    /// Working directory for the runner
+    #[serde(default)]
+    pub working_dir: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PackageRunner {
+    /// Python via uvx
+    Uvx,
+    /// Node.js via pnpm dlx
+    Pnpm,
+    /// Node.js via npx
+    Npx,
+    /// Node.js via npm exec
+    Npm,
+    /// Bun via bunx
+    Bunx,
+    /// Python via pipx
+    Pipx,
+    /// Go via go run
+    GoRun,
+}
+
+impl Default for PackageRunner {
+    fn default() -> Self {
+        PackageRunner::Uvx
+    }
+}
+
+impl Default for PackageRunnerConfig {
+    fn default() -> Self {
+        Self {
+            runner: PackageRunner::Uvx,
+            package: String::new(),
+            args: Vec::new(),
+            working_dir: None,
+        }
+    }
+}
+
+impl PackageRunnerConfig {
+    /// Generate the command line arguments for this runner
+    pub fn to_command_args(&self) -> Vec<String> {
+        match self.runner {
+            PackageRunner::Uvx => {
+                let mut cmd = vec!["uvx".to_string()];
+                cmd.push(self.package.clone());
+                cmd.extend(self.args.clone());
+                cmd
+            }
+            PackageRunner::Pnpm => {
+                let mut cmd = vec!["pnpm".to_string(), "dlx".to_string()];
+                cmd.push(self.package.clone());
+                cmd.extend(self.args.clone());
+                cmd
+            }
+            PackageRunner::Npx => {
+                let mut cmd = vec!["npx".to_string()];
+                cmd.push(self.package.clone());
+                cmd.extend(self.args.clone());
+                cmd
+            }
+            PackageRunner::Npm => {
+                let mut cmd = vec!["npm".to_string(), "exec".to_string()];
+                cmd.push(format!("--package={}", self.package));
+                cmd.extend(self.args.clone());
+                cmd
+            }
+            PackageRunner::Bunx => {
+                let mut cmd = vec!["bunx".to_string()];
+                cmd.push(self.package.clone());
+                cmd.extend(self.args.clone());
+                cmd
+            }
+            PackageRunner::Pipx => {
+                let mut cmd = vec!["pipx".to_string(), "run".to_string()];
+                cmd.push(self.package.clone());
+                cmd.extend(self.args.clone());
+                cmd
+            }
+            PackageRunner::GoRun => {
+                let mut cmd = vec!["go".to_string(), "run".to_string()];
+                cmd.push(self.package.clone());
+                cmd.extend(self.args.clone());
+                cmd
+            }
+        }
+    }
+
+    /// Get the executable name for this runner
+    pub fn executable(&self) -> &str {
+        match self.runner {
+            PackageRunner::Uvx => "uvx",
+            PackageRunner::Pnpm => "pnpm",
+            PackageRunner::Npx => "npx",
+            PackageRunner::Npm => "npm",
+            PackageRunner::Bunx => "bunx",
+            PackageRunner::Pipx => "pipx",
+            PackageRunner::GoRun => "go",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

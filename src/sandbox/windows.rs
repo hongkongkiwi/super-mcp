@@ -201,6 +201,7 @@ mod tests {
             tags: vec![],
             description: None,
             sandbox: Default::default(),
+            runner: None,
         };
 
         let sandbox = WindowsSandbox::from_config(&config);

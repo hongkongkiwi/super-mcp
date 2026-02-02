@@ -72,12 +72,22 @@ impl ManagedServer {
         let sandbox = create_sandbox(&config);
         let sandbox_arc: Arc<dyn Sandbox> = Arc::from(sandbox);
 
+        // Determine command and args from either local binary or package runner
+        let (command, args) = if let Some(ref runner) = config.runner {
+            // Use package runner
+            let cmd_args = runner.to_command_args();
+            (cmd_args[0].clone(), cmd_args[1..].to_vec())
+        } else {
+            // Use local binary
+            (config.command.clone(), config.args.clone())
+        };
+
         let transport: Box<dyn Transport> = match transport_type {
             TransportType::Stdio => {
                 Box::new(
                     StdioTransport::new(
-                        config.command.clone(),
-                        config.args.clone(),
+                        command,
+                        args,
                         config.env.clone(),
                         sandbox_arc.clone(),
                     )

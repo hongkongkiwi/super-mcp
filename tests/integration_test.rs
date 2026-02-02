@@ -29,10 +29,11 @@ async fn test_full_config_workflow() {
                 tags: vec!["filesystem".to_string()],
                 description: Some("Filesystem server".to_string()),
                 sandbox: Default::default(),
+                runner: None,
             }
         ],
         presets: vec![
-            super_mcp::config::PresetConfig {
+            supermcp::config::PresetConfig {
                 name: "development".to_string(),
                 tags: vec!["filesystem".to_string()],
                 description: Some("Dev preset".to_string()),

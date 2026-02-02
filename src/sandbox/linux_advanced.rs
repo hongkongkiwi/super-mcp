@@ -444,6 +444,7 @@ mod tests {
                 max_cpu_percent: 25,
                 ..Default::default()
             },
+            runner: None,
         };
 
         let sandbox = AdvancedLinuxSandbox::from_config(&server_config);
