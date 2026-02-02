@@ -1,3 +1,4 @@
+use crate::compat::{OneMcpConfigAdapter, StandardMcpConfigAdapter};
 use crate::config::Config;
 use crate::utils::errors::{McpError, McpResult};
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
@@ -5,23 +6,40 @@ use parking_lot::RwLock;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::broadcast;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 /// Supported config file formats
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConfigFormat {
-    /// TOML format (default)
-    Toml,
     /// JSON format
     Json,
+    /// YAML format
+    Yaml,
 }
 
 impl ConfigFormat {
-    /// Detect format from file extension
+    /// Detect format from file extension and content
+    pub fn detect(path: &PathBuf, content: &str) -> Self {
+        let ext = path.extension().and_then(|ext| ext.to_str());
+
+        match ext {
+            Some("json") => ConfigFormat::Json,
+            Some("yml") | Some("yaml") => ConfigFormat::Yaml,
+            _ => {
+                if content.trim_start().starts_with('{') {
+                    ConfigFormat::Json
+                } else {
+                    ConfigFormat::Yaml
+                }
+            }
+        }
+    }
+
+    /// Detect format from file extension only
     pub fn from_path(path: &PathBuf) -> Self {
         match path.extension().and_then(|ext| ext.to_str()) {
             Some("json") => ConfigFormat::Json,
-            Some("toml") | _ => ConfigFormat::Toml,
+            Some("yml") | Some("yaml") | _ => ConfigFormat::Yaml,
         }
     }
 }
@@ -34,6 +52,7 @@ pub enum ConfigEvent {
 
 pub struct ConfigManager {
     path: PathBuf,
+    format: ConfigFormat,
     config: Arc<RwLock<Config>>,
     event_tx: broadcast::Sender<ConfigEvent>,
     _watcher: RecommendedWatcher,
@@ -42,7 +61,14 @@ pub struct ConfigManager {
 impl ConfigManager {
     pub async fn new(path: impl Into<PathBuf>) -> McpResult<Self> {
         let path = path.into();
-        let config = Self::load_config(&path).await?;
+        let content = tokio::fs::read_to_string(&path)
+            .await
+            .map_err(|e| McpError::ConfigError(format!("Failed to read config: {}", e)))?;
+
+        let format = ConfigFormat::detect(&path, &content);
+        debug!("Detected config format: {:?}", format);
+
+        let config = Self::parse_content(&path, &content, format).await?;
         let config = Arc::new(RwLock::new(config));
 
         let (event_tx, _) = broadcast::channel(16);
@@ -63,15 +89,22 @@ impl ConfigManager {
                         let rt = rt_handle.clone();
 
                         rt.spawn(async move {
-                            match Self::load_config(&path_clone).await {
+                            let content = match tokio::fs::read_to_string(&path_clone).await {
+                                Ok(c) => c,
+                                Err(e) => {
+                                    let _ = event_tx_clone.send(ConfigEvent::Error(e.to_string()));
+                                    return;
+                                }
+                            };
+                            let format = ConfigFormat::detect(&path_clone, &content);
+                            match Self::parse_content(&path_clone, &content, format).await {
                                 Ok(new_config) => {
                                     *config_clone.write() = new_config;
                                     let _ = event_tx_clone.send(ConfigEvent::Reloaded);
                                 }
                                 Err(e) => {
                                     error!("Failed to reload config: {}", e);
-                                    let _ = event_tx_clone
-                                        .send(ConfigEvent::Error(e.to_string()));
+                                    let _ = event_tx_clone.send(ConfigEvent::Error(e.to_string()));
                                 }
                             }
                         });
@@ -86,37 +119,55 @@ impl ConfigManager {
 
         let mut manager = Self {
             path,
+            format,
             config,
             event_tx,
             _watcher: watcher,
         };
 
-        // Start watching
         manager.start_watching().await?;
-
         Ok(manager)
     }
 
-    async fn load_config(path: &PathBuf) -> McpResult<Config> {
-        let content = tokio::fs::read_to_string(path)
-            .await
-            .map_err(|e| McpError::ConfigError(format!("Failed to read config: {}", e)))?;
-
-        let format = ConfigFormat::from_path(path);
-
-        let config: Config = match format {
-            ConfigFormat::Toml => toml::from_str(&content)
-                .map_err(|e| McpError::ConfigError(format!("Failed to parse TOML config: {}", e)))?,
-            ConfigFormat::Json => serde_json::from_str(&content)
-                .map_err(|e| McpError::ConfigError(format!("Failed to parse JSON config: {}", e)))?,
-        };
-
-        Ok(config)
+    async fn parse_content(_path: &PathBuf, content: &str, format: ConfigFormat) -> McpResult<Config> {
+        match format {
+            ConfigFormat::Json => {
+                if content.contains("\"mcpServers\"") {
+                    let mcp_config = serde_json::from_str::<crate::compat::McpJsonConfig>(content)
+                        .map_err(|e| McpError::ConfigError(format!("Failed to parse mcp.json: {}", e)))?;
+                    Ok(StandardMcpConfigAdapter::convert_mcp_json(&mcp_config))
+                } else if content.contains("\"mcp\"") && content.contains("\"server\"") {
+                    let smithery_config: crate::compat::SmitheryConfig = serde_json::from_str(content)
+                        .map_err(|e| McpError::ConfigError(format!("Failed to parse Smithery config: {}", e)))?;
+                    Ok(StandardMcpConfigAdapter::convert_smithery(&smithery_config))
+                } else if content.contains("\"presets\"") && content.contains("\"servers\"") {
+                    let presets_config: crate::compat::PresetsConfig = serde_json::from_str(content)
+                        .map_err(|e| McpError::ConfigError(format!("Failed to parse presets.json: {}", e)))?;
+                    Ok(StandardMcpConfigAdapter::convert_presets_json(&presets_config))
+                } else {
+                    serde_json::from_str(content)
+                        .map_err(|e| McpError::ConfigError(format!("Failed to parse JSON config: {}", e)))
+                }
+            }
+            ConfigFormat::Yaml => {
+                if content.contains("presets:") && content.contains("servers:") {
+                    let presets_config: crate::compat::PresetsConfig = serde_yaml::from_str(content)
+                        .map_err(|e| McpError::ConfigError(format!("Failed to parse presets.yaml: {}", e)))?;
+                    Ok(StandardMcpConfigAdapter::convert_presets_json(&presets_config))
+                } else if content.contains("sandboxing:") || content.contains("rate_limiting:") {
+                    let one_mcp_config: crate::compat::config::OneMcpConfig = serde_yaml::from_str(content)
+                        .map_err(|e| McpError::ConfigError(format!("Failed to parse 1MCP config: {}", e)))?;
+                    Ok(OneMcpConfigAdapter::convert(&one_mcp_config))
+                } else {
+                    serde_yaml::from_str(content)
+                        .map_err(|e| McpError::ConfigError(format!("Failed to parse YAML config: {}", e)))
+                }
+            }
+        }
     }
 
     async fn start_watching(&mut self) -> McpResult<()> {
-        self._watcher
-            .watch(&self.path, RecursiveMode::NonRecursive)
+        self._watcher.watch(&self.path, RecursiveMode::NonRecursive)
             .map_err(|e| McpError::ConfigError(e.to_string()))?;
         Ok(())
     }
@@ -130,31 +181,33 @@ impl ConfigManager {
     }
 
     pub async fn reload(&self) -> McpResult<()> {
-        let new_config = Self::load_config(&self.path).await?;
+        let content = tokio::fs::read_to_string(&self.path).await
+            .map_err(|e| McpError::ConfigError(format!("Failed to read config: {}", e)))?;
+        let new_config = Self::parse_content(&self.path, &content, self.format).await?;
         *self.config.write() = new_config;
         let _ = self.event_tx.send(ConfigEvent::Reloaded);
         Ok(())
     }
 
-    /// Save configuration to file
     pub async fn save(&self, config: &Config) -> McpResult<()> {
-        let format = ConfigFormat::from_path(&self.path);
-
-        let content = match format {
-            ConfigFormat::Toml => toml::to_string_pretty(config)
-                .map_err(|e| McpError::ConfigError(format!("Failed to serialize TOML config: {}", e)))?,
+        let content = match self.format {
             ConfigFormat::Json => serde_json::to_string_pretty(config)
-                .map_err(|e| McpError::ConfigError(format!("Failed to serialize JSON config: {}", e)))?,
+                .map_err(|e| McpError::ConfigError(format!("Failed to serialize JSON: {}", e)))?,
+            ConfigFormat::Yaml => serde_yaml::to_string(config)
+                .map_err(|e| McpError::ConfigError(format!("Failed to serialize YAML: {}", e)))?,
         };
-
-        tokio::fs::write(&self.path, content)
-            .await
+        tokio::fs::write(&self.path, content).await
             .map_err(|e| McpError::ConfigError(format!("Failed to write config: {}", e)))?;
-
-        // Update the internal config
         *self.config.write() = config.clone();
-
         Ok(())
+    }
+
+    pub async fn export_mcp_json(&self) -> String {
+        crate::compat::StandardMcpConfigWriter::to_mcp_json(&self.get_config())
+    }
+
+    pub async fn export_presets_json(&self) -> String {
+        crate::compat::StandardMcpConfigWriter::to_presets_json(&self.get_config())
     }
 }
 
@@ -165,30 +218,42 @@ mod tests {
     use tokio::fs;
 
     #[tokio::test]
-    async fn test_load_config() {
+    async fn test_load_json_config() {
         let temp_dir = TempDir::new().unwrap();
-        let config_path = temp_dir.path().join("config.toml");
-
-        let config_content = r#"
-[server]
-host = "0.0.0.0"
-port = 8080
-
-[[servers]]
-name = "test"
-command = "echo"
-args = ["hello"]
-tags = ["test"]
-"#;
-
-        fs::write(&config_path, config_content).await.unwrap();
-
+        let config_path = temp_dir.path().join("config.json");
+        let content = r#"{"server": {"host": "0.0.0.0", "port": 8080}, "servers": [{"name": "test", "command": "echo", "args": ["hello"], "tags": ["test"]}]}"#;
+        fs::write(&config_path, content).await.unwrap();
         let manager = ConfigManager::new(&config_path).await.unwrap();
         let config = manager.get_config();
-
         assert_eq!(config.server.host, "0.0.0.0");
         assert_eq!(config.server.port, 8080);
         assert_eq!(config.servers.len(), 1);
         assert_eq!(config.servers[0].name, "test");
+    }
+
+    #[tokio::test]
+    async fn test_load_mcp_json_config() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("mcp.json");
+        let content = r#"{"mcpServers": {"filesystem": {"command": "uvx", "args": ["@modelcontextprotocol/server-filesystem", "/tmp"]}}}"#;
+        fs::write(&config_path, content).await.unwrap();
+        let manager = ConfigManager::new(&config_path).await.unwrap();
+        let config = manager.get_config();
+        assert_eq!(config.servers.len(), 1);
+        assert_eq!(config.servers[0].name, "filesystem");
+    }
+
+    #[test]
+    fn test_config_format_detection() {
+        let cases = vec![
+            ("config.json", ConfigFormat::Json),
+            ("mcp.json", ConfigFormat::Json),
+            ("config.yaml", ConfigFormat::Yaml),
+            ("config.yml", ConfigFormat::Yaml),
+        ];
+        for (path, expected) in cases {
+            let path_buf = PathBuf::from(path);
+            assert_eq!(ConfigFormat::from_path(&path_buf), expected, "Failed for: {}", path);
+        }
     }
 }

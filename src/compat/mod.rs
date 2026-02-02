@@ -4,9 +4,22 @@
 
 pub mod api;
 pub mod config;
+pub mod standard;
 
 pub use api::{one_mcp_routes, one_mcp_compat_middleware};
 pub use config::{OneMcpConfigAdapter, OneMcpMigration};
+pub use standard::{
+    StandardMcpConfigAdapter,
+    StandardMcpConfigWriter,
+    StandardConfigFormat,
+    PresetsConfig,
+    PresetDefinition,
+    PresetServer,
+    McpJsonConfig,
+    McpServerEntry,
+    SmitheryConfig,
+    GenericMcpConfig,
+};
 
 use std::collections::HashMap;
 use tracing::{info, warn};

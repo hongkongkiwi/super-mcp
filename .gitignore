@@ -95,3 +95,6 @@ bin/
 # macOS Finder
 .Trashes
 .Spotlight-V100
+
+# Serena AI coding agent
+.serena/
