@@ -280,6 +280,8 @@ pub enum PackageRunner {
     Uvx,
     /// Node.js via pnpm dlx
     Pnpm,
+    /// Node.js via pnpx
+    Pnpx,
     /// Node.js via npx
     Npx,
     /// Node.js via npm exec
@@ -290,6 +292,14 @@ pub enum PackageRunner {
     Pipx,
     /// Go via go run
     GoRun,
+    /// Rust via cargo run
+    CargoRun,
+    /// Deno via deno run
+    DenoRun,
+    /// Ruby via bundle exec
+    BundleExec,
+    /// PHP via composer exec
+    ComposerExec,
 }
 
 impl Default for PackageRunner {
@@ -325,6 +335,12 @@ impl PackageRunnerConfig {
                 cmd.extend(self.args.clone());
                 cmd
             }
+            PackageRunner::Pnpx => {
+                let mut cmd = vec!["pnpx".to_string()];
+                cmd.push(self.package.clone());
+                cmd.extend(self.args.clone());
+                cmd
+            }
             PackageRunner::Npx => {
                 let mut cmd = vec!["npx".to_string()];
                 cmd.push(self.package.clone());
@@ -355,6 +371,30 @@ impl PackageRunnerConfig {
                 cmd.extend(self.args.clone());
                 cmd
             }
+            PackageRunner::CargoRun => {
+                let mut cmd = vec!["cargo".to_string(), "run".to_string(), "--package".to_string()];
+                cmd.push(self.package.clone());
+                cmd.extend(self.args.clone());
+                cmd
+            }
+            PackageRunner::DenoRun => {
+                let mut cmd = vec!["deno".to_string(), "run".to_string()];
+                cmd.push(self.package.clone());
+                cmd.extend(self.args.clone());
+                cmd
+            }
+            PackageRunner::BundleExec => {
+                let mut cmd = vec!["bundle".to_string(), "exec".to_string()];
+                cmd.push(self.package.clone());
+                cmd.extend(self.args.clone());
+                cmd
+            }
+            PackageRunner::ComposerExec => {
+                let mut cmd = vec!["composer".to_string(), "exec".to_string()];
+                cmd.push(self.package.clone());
+                cmd.extend(self.args.clone());
+                cmd
+            }
         }
     }
 
@@ -363,11 +403,16 @@ impl PackageRunnerConfig {
         match self.runner {
             PackageRunner::Uvx => "uvx",
             PackageRunner::Pnpm => "pnpm",
+            PackageRunner::Pnpx => "pnpx",
             PackageRunner::Npx => "npx",
             PackageRunner::Npm => "npm",
             PackageRunner::Bunx => "bunx",
             PackageRunner::Pipx => "pipx",
             PackageRunner::GoRun => "go",
+            PackageRunner::CargoRun => "cargo",
+            PackageRunner::DenoRun => "deno",
+            PackageRunner::BundleExec => "bundle",
+            PackageRunner::ComposerExec => "composer",
         }
     }
 }
