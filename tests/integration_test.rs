@@ -1,7 +1,7 @@
 //! Integration tests
 
-use super_mcp::config::{Config, McpServerConfig, validation::ConfigValidator};
-use super_mcp::core::protocol::JsonRpcRequest;
+use supermcp::config::{Config, McpServerConfig, validation::ConfigValidator};
+use supermcp::core::protocol::JsonRpcRequest;
 use serde_json::json;
 use std::collections::HashMap;
 use tempfile::TempDir;
@@ -82,7 +82,7 @@ fn test_json_rpc_roundtrip() {
 
 #[test]
 fn test_error_response_conversion() {
-    use super_mcp::utils::errors::McpError;
+    use supermcp::utils::errors::McpError;
     use axum::http::StatusCode;
     
     let errors = vec![
@@ -101,7 +101,7 @@ fn test_error_response_conversion() {
 
 #[test]
 fn test_sandbox_constraints_default() {
-    use super_mcp::sandbox::traits::SandboxConstraints;
+    use supermcp::sandbox::traits::SandboxConstraints;
     
     let constraints = SandboxConstraints::default();
     assert_eq!(constraints.max_memory_mb, 512);
@@ -111,7 +111,7 @@ fn test_sandbox_constraints_default() {
 
 #[tokio::test]
 async fn test_config_manager_events() {
-    use super_mcp::config::ConfigManager;
+    use supermcp::config::ConfigManager;
     
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("config.toml");
@@ -146,7 +146,7 @@ port = 4000
 
 #[test]
 fn test_registry_types_serialization() {
-    use super_mcp::registry::types::{RegistryEntry, SearchResults};
+    use supermcp::registry::types::{RegistryEntry, SearchResults};
     
     let entry = RegistryEntry {
         name: "test".to_string(),

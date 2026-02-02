@@ -1,6 +1,6 @@
 //! CLI command tests
 
-use super_mcp::cli;
+use supermcp::cli;
 use tempfile::TempDir;
 use tokio::fs;
 

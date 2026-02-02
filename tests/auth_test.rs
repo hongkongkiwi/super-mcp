@@ -1,6 +1,6 @@
 //! Authentication provider tests
 
-use super_mcp::auth::{AuthProvider, JwtAuth, StaticTokenAuth};
+use supermcp::auth::{AuthProvider, JwtAuth, StaticTokenAuth};
 
 #[tokio::test]
 async fn test_static_token_auth_valid() {

@@ -1,6 +1,6 @@
 //! Transport layer tests
 
-use super_mcp::core::protocol::{JsonRpcRequest, JsonRpcResponse, RequestId};
+use supermcp::core::protocol::{JsonRpcRequest, JsonRpcResponse, RequestId};
 use serde_json::json;
 
 #[test]

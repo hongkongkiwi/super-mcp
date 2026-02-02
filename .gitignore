@@ -91,7 +91,6 @@ config.local.toml
 
 # Binaries installed by cargo
 bin/
-*/
 
 # macOS Finder
 .Trashes

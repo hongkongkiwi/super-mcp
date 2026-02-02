@@ -1,7 +1,7 @@
 //! Server management tests
 
-use super_mcp::config::McpServerConfig;
-use super_mcp::core::ServerManager;
+use supermcp::config::McpServerConfig;
+use supermcp::core::ServerManager;
 use std::collections::HashMap;
 
 #[test]

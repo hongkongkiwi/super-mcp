@@ -1,7 +1,7 @@
 //! Configuration management tests
 
-use super_mcp::config::{Config, ConfigManager, ServerConfig, McpServerConfig};
-use super_mcp::config::validation::ConfigValidator;
+use supermcp::config::{Config, ConfigManager, ServerConfig, McpServerConfig};
+use supermcp::config::validation::ConfigValidator;
 use tempfile::TempDir;
 use tokio::fs;
 

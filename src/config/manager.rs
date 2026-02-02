@@ -135,6 +135,27 @@ impl ConfigManager {
         let _ = self.event_tx.send(ConfigEvent::Reloaded);
         Ok(())
     }
+
+    /// Save configuration to file
+    pub async fn save(&self, config: &Config) -> McpResult<()> {
+        let format = ConfigFormat::from_path(&self.path);
+
+        let content = match format {
+            ConfigFormat::Toml => toml::to_string_pretty(config)
+                .map_err(|e| McpError::ConfigError(format!("Failed to serialize TOML config: {}", e)))?,
+            ConfigFormat::Json => serde_json::to_string_pretty(config)
+                .map_err(|e| McpError::ConfigError(format!("Failed to serialize JSON config: {}", e)))?,
+        };
+
+        tokio::fs::write(&self.path, content)
+            .await
+            .map_err(|e| McpError::ConfigError(format!("Failed to write config: {}", e)))?;
+
+        // Update the internal config
+        *self.config.write() = config.clone();
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]

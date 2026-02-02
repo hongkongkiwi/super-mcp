@@ -10,6 +10,7 @@ pub mod config;
 pub mod core;
 pub mod http_server;
 pub mod registry;
+pub mod runtime;
 pub mod sandbox;
 pub mod transport;
 pub mod utils;

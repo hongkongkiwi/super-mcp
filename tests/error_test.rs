@@ -1,5 +1,5 @@
 use axum::http::StatusCode;
-use super_mcp::utils::errors::McpError;
+use supermcp::utils::errors::McpError;
 
 #[test]
 fn test_error_status_codes() {

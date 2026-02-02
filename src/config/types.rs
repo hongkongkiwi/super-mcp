@@ -3,6 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use validator::Validate;
 
+// Re-export runtime types for config use
+pub use crate::runtime::types::{ResourceLimits, RuntimeConfig, RuntimeType};
+
 /// Main configuration structure
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Validate)]
 pub struct Config {
@@ -24,6 +27,8 @@ pub struct Config {
     pub presets: Vec<PresetConfig>,
     #[serde(default)]
     pub registry: RegistryConfig,
+    #[serde(default)]
+    pub runtimes: Vec<RuntimeConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -330,6 +335,7 @@ impl Default for Config {
             servers: vec![],
             presets: vec![],
             registry: RegistryConfig::default(),
+            runtimes: vec![],
         }
     }
 }

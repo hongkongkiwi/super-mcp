@@ -1,6 +1,6 @@
 //! Registry client tests
 
-use super_mcp::registry::{RegistryClient, types::RegistryConfig};
+use supermcp::registry::{RegistryClient, types::RegistryConfig};
 use std::path::PathBuf;
 
 fn create_test_registry_config() -> RegistryConfig {

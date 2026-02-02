@@ -1,4 +1,4 @@
-# Super MCP
+# SuperMCP
 
 A secure, high-performance Model Context Protocol (MCP) server proxy with advanced sandboxing, written in Rust.
 
@@ -16,12 +16,12 @@ A secure, high-performance Model Context Protocol (MCP) server proxy with advanc
 ### Installation
 
 ```bash
-cargo install super-mcp
+cargo install supermcp
 ```
 
 ### Configuration
 
-Create a configuration file at `~/.config/super-mcp/config.toml`:
+Create a configuration file at `~/.config/supermcp/config.toml`:
 
 ```toml
 [server]
@@ -47,7 +47,7 @@ supermcp serve
 
 ## Architecture
 
-Super MCP uses a layered architecture:
+SuperMCP uses a layered architecture:
 
 - **Security Layer**: Platform-native sandboxing (seccomp/Landlock on Linux, seatbelt on macOS)
 - **Core Layer**: Server lifecycle management, capability handling

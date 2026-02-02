@@ -1,11 +1,11 @@
 [package]
-name = "super-mcp"
+name = "supermcp"
 version = "0.1.0"
 edition = "2021"
 authors = ["Your Name <you@example.com>"]
-description = "Super MCP - Secure MCP server proxy with advanced sandboxing"
+description = "SuperMCP - Secure MCP server proxy with advanced sandboxing"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/yourusername/mcp-one"
+repository = "https://github.com/yourusername/supermcp"
 
 [[bin]]
 name = "supermcp"

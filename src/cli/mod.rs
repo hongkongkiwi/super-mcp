@@ -4,6 +4,7 @@ pub mod install;
 pub mod mcp;
 pub mod preset;
 pub mod registry;
+pub mod runtime;
 
 use crate::utils::errors::McpResult;
 use std::path::PathBuf;

@@ -1,9 +1,9 @@
 use clap::{Parser, Subcommand};
-use super_mcp::cli;
-use super_mcp::config::types::LazyLoadingMode;
-use super_mcp::config::ConfigManager;
-use super_mcp::core::ServerManager;
-use super_mcp::http_server::HttpServer;
+use supermcp::cli;
+use supermcp::config::types::LazyLoadingMode;
+use supermcp::config::ConfigManager;
+use supermcp::core::ServerManager;
+use supermcp::http_server::HttpServer;
 use std::sync::Arc;
 use tracing::{error, info};
 
@@ -28,12 +28,14 @@ enum Cli {
     Migrate(MigrateArgs),
     /// Show migration guide and feature comparison
     Guide,
+    /// Manage runtimes
+    Runtime(RuntimeArgs),
 }
 
 #[derive(Parser)]
 struct ServeArgs {
     /// Configuration file path
-    #[arg(short, long, default_value = "~/.config/super-mcp/config.toml")]
+    #[arg(short, long, default_value = "~/.config/supermcp/config.toml")]
     config: String,
     /// Host to bind to
     #[arg(short = 'H', long, default_value = "127.0.0.1")]
@@ -189,7 +191,7 @@ struct InstallArgs {
     /// Startup manager to use (launchd, systemd, openrc, runit, nssm, schtasks)
     #[arg(short, long)]
     manager: Option<String>,
-    /// Path to the super-mcp binary
+    /// Path to the supermcp binary
     #[arg(short, long)]
     binary: Option<String>,
     /// Path to the configuration file
@@ -203,7 +205,7 @@ struct InstallArgs {
 #[derive(Parser)]
 struct ValidateArgs {
     /// Configuration file path
-    #[arg(short, long, default_value = "~/.config/super-mcp/config.toml")]
+    #[arg(short, long, default_value = "~/.config/supermcp/config.toml")]
     config: String,
     /// Output format
     #[arg(short, long, default_value = "text", value_parser = ["text", "json"])]
@@ -224,6 +226,70 @@ struct MigrateArgs {
     /// Dry run - don't write file, just validate
     #[arg(long)]
     dry_run: bool,
+}
+
+#[derive(Parser)]
+struct RuntimeArgs {
+    #[command(subcommand)]
+    command: RuntimeCommand,
+    /// Configuration file path
+    #[arg(short, long, default_value = "~/.config/super-mcp/config.toml", global = true)]
+    config: String,
+}
+
+#[derive(Subcommand, Debug)]
+enum RuntimeCommand {
+    /// Add a new runtime
+    Add {
+        name: String,
+        /// Runtime type (python_wasm, node_pnpm, node_npm, node_bun)
+        #[arg(short, long)]
+        type_: String,
+        /// Packages to install (comma-separated for Node.js)
+        #[arg(short, long, value_delimiter = ',')]
+        packages: Option<Vec<String>>,
+        /// Working directory
+        #[arg(short, long)]
+        working_dir: Option<String>,
+        /// Environment variables (KEY=value format)
+        #[arg(short, long, value_delimiter = ',')]
+        env: Option<Vec<String>>,
+        /// Maximum memory in MB
+        #[arg(long)]
+        max_memory: Option<u64>,
+        /// Maximum CPU percentage
+        #[arg(long)]
+        max_cpu: Option<u32>,
+        /// Timeout in seconds
+        #[arg(long)]
+        timeout: Option<u64>,
+        /// Allow network access
+        #[arg(long)]
+        network: bool,
+    },
+    /// List all configured runtimes
+    List {
+        /// Output as JSON
+        #[arg(short, long)]
+        json: bool,
+    },
+    /// Remove a runtime
+    Remove { name: String },
+    /// Show runtime information
+    Info { name: String },
+    /// Validate all runtimes
+    Validate,
+    /// Execute a script using a runtime
+    Exec {
+        /// Runtime name to use
+        runtime: String,
+        /// Script to execute
+        #[arg(short, long)]
+        script: Option<String>,
+        /// File to execute
+        #[arg(short, long)]
+        file: Option<String>,
+    },
 }
 
 #[tokio::main]
@@ -406,9 +472,74 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         Cli::Guide => {
-            super_mcp::compat::MigrationHelper::print_migration_guide();
+            supermcp::compat::MigrationHelper::print_migration_guide();
             println!();
-            super_mcp::compat::MigrationHelper::print_feature_comparison();
+            supermcp::compat::MigrationHelper::print_feature_comparison();
+        }
+        Cli::Runtime(args) => {
+            match args.command {
+                RuntimeCommand::Add {
+                    name,
+                    type_,
+                    packages,
+                    working_dir,
+                    env,
+                    max_memory,
+                    max_cpu,
+                    timeout,
+                    network,
+                } => {
+                    if let Err(e) = cli::runtime::add(
+                        &args.config,
+                        &name,
+                        &type_,
+                        packages,
+                        working_dir,
+                        env,
+                        max_memory,
+                        max_cpu,
+                        timeout,
+                        Some(network),
+                    ).await {
+                        eprintln!("Error: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+                RuntimeCommand::List { json } => {
+                    if let Err(e) = cli::runtime::list(&args.config, json).await {
+                        eprintln!("Error: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+                RuntimeCommand::Remove { name } => {
+                    if let Err(e) = cli::runtime::remove(&args.config, &name).await {
+                        eprintln!("Error: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+                RuntimeCommand::Info { name } => {
+                    if let Err(e) = cli::runtime::info(&args.config, &name).await {
+                        eprintln!("Error: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+                RuntimeCommand::Validate => {
+                    if let Err(e) = cli::runtime::validate(&args.config).await {
+                        eprintln!("Error: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+                RuntimeCommand::Exec { runtime, script, file } => {
+                    if script.is_none() && file.is_none() {
+                        eprintln!("Error: Either --script or --file must be provided");
+                        std::process::exit(1);
+                    }
+                    if let Err(e) = cli::runtime::execute(&args.config, &runtime, script.as_deref(), file).await {
+                        eprintln!("Error: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            }
         }
     }
 
@@ -421,8 +552,8 @@ async fn migrate_config(
     format: &str,
     dry_run: bool,
 ) -> anyhow::Result<()> {
-    use super_mcp::compat::config::{OneMcpConfigAdapter, OneMcpMigration};
-    use super_mcp::compat::MigrationHelper;
+    use supermcp::compat::config::{OneMcpConfigAdapter, OneMcpMigration};
+    use supermcp::compat::MigrationHelper;
 
     let input_path = shellexpand::tilde(input).to_string();
     
@@ -441,7 +572,7 @@ async fn migrate_config(
 
     // Get migration notes
     let yaml_content = tokio::fs::read_to_string(&input_path).await?;
-    let one_mcp_config = OneMcpConfigAdapter::parse(&yaml_content, super_mcp::compat::config::ConfigFormat::Yaml)
+    let one_mcp_config = OneMcpConfigAdapter::parse(&yaml_content, supermcp::compat::config::ConfigFormat::Yaml)
         .map_err(|e| anyhow::anyhow!("Failed to parse 1MCP config: {}", e))?;
     let (_config, notes) = OneMcpMigration::generate_config(&one_mcp_config);
 
@@ -488,7 +619,7 @@ async fn migrate_config(
 }
 
 async fn validate_config(config_path: &str, format: &str) -> anyhow::Result<()> {
-    use super_mcp::config::validation::ConfigValidator;
+    use supermcp::config::validation::ConfigValidator;
     use serde_json::json;
 
     let path = shellexpand::tilde(config_path).to_string();
