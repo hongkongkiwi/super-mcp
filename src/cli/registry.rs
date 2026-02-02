@@ -125,7 +125,6 @@ pub async fn install(config_path: &str, name: &str) -> McpResult<()> {
                 tags: entry.tags,
                 description: Some(entry.description),
                 sandbox: SandboxConfig::default(),
-                runner: None,
             };
 
             config.servers.push(server_config);

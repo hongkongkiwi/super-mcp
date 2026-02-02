@@ -370,7 +370,6 @@ mod tests {
                 max_memory_mb: 256,
                 ..Default::default()
             },
-            runner: None,
         };
 
         let sandbox = WasmSandbox::from_config(&server_config);

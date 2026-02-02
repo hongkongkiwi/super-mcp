@@ -35,7 +35,6 @@ impl StdioTransport {
             tags: vec![],
             description: None,
             sandbox: crate::config::SandboxConfig::default(),
-            runner: None,
         };
 
         let mut child = sandbox.spawn(&config).await?;

@@ -50,7 +50,6 @@ pub async fn add(
         tags: tags.unwrap_or_default(),
         description,
         sandbox: SandboxConfig::default(),
-        runner: None,
     };
 
     config.servers.push(server_config);

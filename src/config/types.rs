@@ -233,49 +233,43 @@ impl Default for LazyLoadingMode {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
 pub struct McpServerConfig {
     pub name: String,
-    /// Local binary command (e.g., "/path/to/server")
-    #[serde(default)]
+    /// Command to run (local binary or package runner like "uvx @mcp/server")
     pub command: String,
-    /// Arguments for local binary
-    #[serde(default)]
+    /// Arguments for the command
     pub args: Vec<String>,
     /// Environment variables
-    #[serde(default)]
     pub env: HashMap<String, String>,
     /// Tags for categorization
-    #[serde(default)]
     pub tags: Vec<String>,
     /// Description
-    #[serde(default)]
     pub description: Option<String>,
     /// Sandbox configuration
-    #[serde(default)]
     pub sandbox: SandboxConfig,
-    /// Package runner configuration (alternative to command)
-    #[serde(default)]
-    pub runner: Option<PackageRunnerConfig>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct PackageRunnerConfig {
-    /// Runner type (uvx, pnpm, npx, bunx, etc.)
-    pub runner: PackageRunner,
-    /// Package name to run
-    pub package: String,
-    /// Additional arguments to pass to the package
-    #[serde(default)]
-    pub args: Vec<String>,
-    /// Working directory for the runner
-    #[serde(default)]
-    pub working_dir: Option<String>,
+impl Default for McpServerConfig {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            command: String::new(),
+            args: Vec::new(),
+            env: HashMap::new(),
+            tags: Vec::new(),
+            description: None,
+            sandbox: SandboxConfig::default(),
+        }
+    }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum PackageRunner {
+/// Detected runner type from command
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DetectedRunner {
+    /// Local binary (not a known package runner)
+    Local,
     /// Python via uvx
     Uvx,
     /// Node.js via pnpm dlx
@@ -302,118 +296,45 @@ pub enum PackageRunner {
     ComposerExec,
 }
 
-impl Default for PackageRunner {
-    fn default() -> Self {
-        PackageRunner::Uvx
-    }
-}
+impl McpServerConfig {
+    /// Auto-detect runner type from command
+    pub fn detected_runner(&self) -> DetectedRunner {
+        let exe = std::path::PathBuf::from(&self.command)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(|s| s.to_lowercase())
+            .unwrap_or_default();
 
-impl Default for PackageRunnerConfig {
-    fn default() -> Self {
-        Self {
-            runner: PackageRunner::Uvx,
-            package: String::new(),
-            args: Vec::new(),
-            working_dir: None,
-        }
-    }
-}
-
-impl PackageRunnerConfig {
-    /// Generate the command line arguments for this runner
-    pub fn to_command_args(&self) -> Vec<String> {
-        match self.runner {
-            PackageRunner::Uvx => {
-                let mut cmd = vec!["uvx".to_string()];
-                cmd.push(self.package.clone());
-                cmd.extend(self.args.clone());
-                cmd
-            }
-            PackageRunner::Pnpm => {
-                let mut cmd = vec!["pnpm".to_string(), "dlx".to_string()];
-                cmd.push(self.package.clone());
-                cmd.extend(self.args.clone());
-                cmd
-            }
-            PackageRunner::Pnpx => {
-                let mut cmd = vec!["pnpx".to_string()];
-                cmd.push(self.package.clone());
-                cmd.extend(self.args.clone());
-                cmd
-            }
-            PackageRunner::Npx => {
-                let mut cmd = vec!["npx".to_string()];
-                cmd.push(self.package.clone());
-                cmd.extend(self.args.clone());
-                cmd
-            }
-            PackageRunner::Npm => {
-                let mut cmd = vec!["npm".to_string(), "exec".to_string()];
-                cmd.push(format!("--package={}", self.package));
-                cmd.extend(self.args.clone());
-                cmd
-            }
-            PackageRunner::Bunx => {
-                let mut cmd = vec!["bunx".to_string()];
-                cmd.push(self.package.clone());
-                cmd.extend(self.args.clone());
-                cmd
-            }
-            PackageRunner::Pipx => {
-                let mut cmd = vec!["pipx".to_string(), "run".to_string()];
-                cmd.push(self.package.clone());
-                cmd.extend(self.args.clone());
-                cmd
-            }
-            PackageRunner::GoRun => {
-                let mut cmd = vec!["go".to_string(), "run".to_string()];
-                cmd.push(self.package.clone());
-                cmd.extend(self.args.clone());
-                cmd
-            }
-            PackageRunner::CargoRun => {
-                let mut cmd = vec!["cargo".to_string(), "run".to_string(), "--package".to_string()];
-                cmd.push(self.package.clone());
-                cmd.extend(self.args.clone());
-                cmd
-            }
-            PackageRunner::DenoRun => {
-                let mut cmd = vec!["deno".to_string(), "run".to_string()];
-                cmd.push(self.package.clone());
-                cmd.extend(self.args.clone());
-                cmd
-            }
-            PackageRunner::BundleExec => {
-                let mut cmd = vec!["bundle".to_string(), "exec".to_string()];
-                cmd.push(self.package.clone());
-                cmd.extend(self.args.clone());
-                cmd
-            }
-            PackageRunner::ComposerExec => {
-                let mut cmd = vec!["composer".to_string(), "exec".to_string()];
-                cmd.push(self.package.clone());
-                cmd.extend(self.args.clone());
-                cmd
-            }
+        match exe.as_str() {
+            "uvx" => DetectedRunner::Uvx,
+            "pnpm" | "pnpm-dlx" => DetectedRunner::Pnpm,
+            "pnpx" => DetectedRunner::Pnpx,
+            "npx" => DetectedRunner::Npx,
+            "npm" => DetectedRunner::Npm,
+            "bunx" | "bun" => DetectedRunner::Bunx,
+            "pipx" => DetectedRunner::Pipx,
+            "go" => DetectedRunner::GoRun,
+            "cargo" => DetectedRunner::CargoRun,
+            "deno" => DetectedRunner::DenoRun,
+            "bundle" => DetectedRunner::BundleExec,
+            "composer" => DetectedRunner::ComposerExec,
+            _ => DetectedRunner::Local,
         }
     }
 
-    /// Get the executable name for this runner
-    pub fn executable(&self) -> &str {
-        match self.runner {
-            PackageRunner::Uvx => "uvx",
-            PackageRunner::Pnpm => "pnpm",
-            PackageRunner::Pnpx => "pnpx",
-            PackageRunner::Npx => "npx",
-            PackageRunner::Npm => "npm",
-            PackageRunner::Bunx => "bunx",
-            PackageRunner::Pipx => "pipx",
-            PackageRunner::GoRun => "go",
-            PackageRunner::CargoRun => "cargo",
-            PackageRunner::DenoRun => "deno",
-            PackageRunner::BundleExec => "bundle",
-            PackageRunner::ComposerExec => "composer",
+    /// Check if this server uses a package runner
+    pub fn is_package_runner(&self) -> bool {
+        self.detected_runner() != DetectedRunner::Local
+    }
+
+    /// Get the package name for package runners (if applicable)
+    pub fn package_name(&self) -> Option<&str> {
+        let runner = self.detected_runner();
+        if runner == DetectedRunner::Local {
+            return None;
         }
+        // Package is typically the first arg for most runners
+        self.args.first().map(|s| s.as_str())
     }
 }
 

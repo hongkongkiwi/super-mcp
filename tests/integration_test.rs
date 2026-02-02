@@ -29,7 +29,6 @@ async fn test_full_config_workflow() {
                 tags: vec!["filesystem".to_string()],
                 description: Some("Filesystem server".to_string()),
                 sandbox: Default::default(),
-                runner: None,
             }
         ],
         presets: vec![

@@ -151,7 +151,6 @@ async fn create_server(
         tags: req.tags.unwrap_or_default(),
         description: None,
         sandbox: crate::config::SandboxConfig::default(),
-        runner: None,
     };
 
     // Add server to manager

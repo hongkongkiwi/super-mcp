@@ -22,7 +22,6 @@ async fn test_add_server() {
         tags: vec!["test".to_string()],
         description: Some("Test server".to_string()),
         sandbox: Default::default(),
-        runner: None,
     };
     
     let _result = manager.add_server(config).await;
@@ -54,7 +53,6 @@ async fn test_get_servers_by_tags() {
         tags: vec!["filesystem".to_string(), "local".to_string()],
         description: None,
         sandbox: Default::default(),
-        runner: None,
     };
 
     let config2 = McpServerConfig {
@@ -65,7 +63,6 @@ async fn test_get_servers_by_tags() {
         tags: vec!["network".to_string()],
         description: None,
         sandbox: Default::default(),
-        runner: None,
     };
     
     // Try to add servers (may fail in test environment)
