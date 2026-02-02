@@ -7,6 +7,25 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 use tracing::{error, info};
 
+/// Supported config file formats
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfigFormat {
+    /// TOML format (default)
+    Toml,
+    /// JSON format
+    Json,
+}
+
+impl ConfigFormat {
+    /// Detect format from file extension
+    pub fn from_path(path: &PathBuf) -> Self {
+        match path.extension().and_then(|ext| ext.to_str()) {
+            Some("json") => ConfigFormat::Json,
+            Some("toml") | _ => ConfigFormat::Toml,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum ConfigEvent {
     Reloaded,
@@ -83,8 +102,14 @@ impl ConfigManager {
             .await
             .map_err(|e| McpError::ConfigError(format!("Failed to read config: {}", e)))?;
 
-        let config: Config = toml::from_str(&content)
-            .map_err(|e| McpError::ConfigError(format!("Failed to parse config: {}", e)))?;
+        let format = ConfigFormat::from_path(path);
+
+        let config: Config = match format {
+            ConfigFormat::Toml => toml::from_str(&content)
+                .map_err(|e| McpError::ConfigError(format!("Failed to parse TOML config: {}", e)))?,
+            ConfigFormat::Json => serde_json::from_str(&content)
+                .map_err(|e| McpError::ConfigError(format!("Failed to parse JSON config: {}", e)))?,
+        };
 
         Ok(config)
     }

@@ -2,6 +2,7 @@
 
 pub mod audit;
 pub mod auth;
+pub mod cache;
 pub mod cli;
 pub mod cloud;
 pub mod compat;

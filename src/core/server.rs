@@ -49,6 +49,7 @@ pub struct ServerStatus {
 }
 
 /// Managed MCP server instance
+#[derive(Clone)]
 pub struct ManagedServer {
     pub config: McpServerConfig,
     transport: Arc<RwLock<Box<dyn Transport>>>,
@@ -128,6 +129,14 @@ impl ManagedServer {
 /// Manages multiple MCP servers
 pub struct ServerManager {
     servers: DashMap<String, ManagedServer>,
+}
+
+impl Clone for ServerManager {
+    fn clone(&self) -> Self {
+        Self {
+            servers: self.servers.clone(),
+        }
+    }
 }
 
 impl ServerManager {

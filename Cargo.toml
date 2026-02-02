@@ -33,6 +33,9 @@ toml = "0.8"
 # CLI
 clap = { version = "4.5", features = ["derive", "env"] }
 clap_complete = "4.5"
+dialoguer = "0.11"
+which = "6.0"
+atty = "0.2"
 
 # Configuration
 figment = { version = "0.10", features = ["toml", "env"] }

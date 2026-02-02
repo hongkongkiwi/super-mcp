@@ -17,6 +17,8 @@ pub struct Config {
     #[serde(default)]
     pub audit: AuditConfig,
     #[serde(default)]
+    pub lazy_loading: LazyLoadingConfig,
+    #[serde(default)]
     pub servers: Vec<McpServerConfig>,
     #[serde(default)]
     pub presets: Vec<PresetConfig>,
@@ -175,6 +177,57 @@ impl Default for LogFormat {
     }
 }
 
+/// Lazy loading configuration
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct LazyLoadingConfig {
+    /// Lazy loading mode
+    pub mode: LazyLoadingMode,
+    /// Schema cache TTL in seconds
+    pub schema_cache_ttl_seconds: u64,
+    /// Servers to preload regardless of mode
+    pub preload_servers: Vec<String>,
+    /// Enable caching
+    pub cache_enabled: bool,
+    /// Presets to load with lazy loading
+    pub preload_presets: Vec<String>,
+    /// Maximum concurrent fetches per server
+    pub max_concurrent_fetches: u32,
+}
+
+impl Default for LazyLoadingConfig {
+    fn default() -> Self {
+        Self {
+            mode: LazyLoadingMode::default(),
+            schema_cache_ttl_seconds: 300,
+            preload_servers: Vec::new(),
+            cache_enabled: true,
+            preload_presets: Vec::new(),
+            max_concurrent_fetches: 4,
+        }
+    }
+}
+
+/// Lazy loading mode
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum LazyLoadingMode {
+    /// Lazy loading disabled, load all schemas eagerly
+    Disabled,
+    /// Return meta-tools (tool_list, tool_schema, tool_invoke)
+    Metatool,
+    /// Preload configured servers, lazy load others
+    Hybrid,
+    /// Full lazy loading, fetch schemas on demand
+    Full,
+}
+
+impl Default for LazyLoadingMode {
+    fn default() -> Self {
+        LazyLoadingMode::Disabled
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
 pub struct McpServerConfig {
     pub name: String,
@@ -273,6 +326,7 @@ impl Default for Config {
             features: FeaturesConfig::default(),
             rate_limit: RateLimitConfig::default(),
             audit: AuditConfig::default(),
+            lazy_loading: LazyLoadingConfig::default(),
             servers: vec![],
             presets: vec![],
             registry: RegistryConfig::default(),

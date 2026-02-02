@@ -1,5 +1,6 @@
 use clap::{Parser, Subcommand};
 use super_mcp::cli;
+use super_mcp::config::types::LazyLoadingMode;
 use super_mcp::config::ConfigManager;
 use super_mcp::core::ServerManager;
 use super_mcp::http_server::HttpServer;
@@ -19,6 +20,8 @@ enum Cli {
     Preset(PresetArgs),
     /// Search and install from registry
     Registry(RegistryArgs),
+    /// Install/uninstall startup manager
+    Install(InstallArgs),
     /// Validate configuration file
     Validate(ValidateArgs),
     /// Migrate from 1MCP configuration
@@ -41,6 +44,29 @@ struct ServeArgs {
     /// Log level
     #[arg(short, long, default_value = "info")]
     log_level: String,
+    /// Enable lazy loading mode (metatool, hybrid, full)
+    #[arg(long, value_enum)]
+    lazy: Option<LazyLoadingModeCli>,
+}
+
+#[derive(clap::ValueEnum, Clone, Debug)]
+enum LazyLoadingModeCli {
+    /// Return meta-tools instead of actual tools
+    Metatool,
+    /// Preload some servers, lazy load others
+    Hybrid,
+    /// Full lazy loading - fetch schemas on demand
+    Full,
+}
+
+impl From<LazyLoadingModeCli> for LazyLoadingMode {
+    fn from(val: LazyLoadingModeCli) -> Self {
+        match val {
+            LazyLoadingModeCli::Metatool => LazyLoadingMode::Metatool,
+            LazyLoadingModeCli::Hybrid => LazyLoadingMode::Hybrid,
+            LazyLoadingModeCli::Full => LazyLoadingMode::Full,
+        }
+    }
 }
 
 #[derive(Parser)]
@@ -159,6 +185,22 @@ enum RegistryCommand {
 }
 
 #[derive(Parser)]
+struct InstallArgs {
+    /// Startup manager to use (launchd, systemd, openrc, runit, nssm, schtasks)
+    #[arg(short, long)]
+    manager: Option<String>,
+    /// Path to the super-mcp binary
+    #[arg(short, long)]
+    binary: Option<String>,
+    /// Path to the configuration file
+    #[arg(short, long)]
+    config: Option<String>,
+    /// Uninstall instead of installing
+    #[arg(long)]
+    uninstall: bool,
+}
+
+#[derive(Parser)]
 struct ValidateArgs {
     /// Configuration file path
     #[arg(short, long, default_value = "~/.config/super-mcp/config.toml")]
@@ -208,6 +250,12 @@ async fn main() -> anyhow::Result<()> {
             // Override with CLI args
             config.server.host = args.host;
             config.server.port = args.port;
+
+            // Apply --lazy CLI flag if provided
+            if let Some(lazy_mode) = args.lazy {
+                info!("Lazy loading mode: {:?}", lazy_mode);
+                config.lazy_loading.mode = lazy_mode.into();
+            }
 
             // Create server manager
             let server_manager = Arc::new(ServerManager::new());
@@ -332,6 +380,17 @@ async fn main() -> anyhow::Result<()> {
                         std::process::exit(1);
                     }
                 }
+            }
+        }
+        Cli::Install(args) => {
+            if let Err(e) = cli::install::install(
+                args.binary.as_deref(),
+                args.config.as_deref(),
+                args.manager.as_deref(),
+                args.uninstall,
+            ).await {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
             }
         }
         Cli::Validate(args) => {

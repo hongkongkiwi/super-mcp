@@ -40,6 +40,16 @@ format = "json"
 max_size_mb = 100
 max_files = 10
 
+# Lazy loading configuration
+# Modes: disabled, metatool, hybrid, full
+[lazy_loading]
+mode = "disabled"
+schema_cache_ttl_seconds = 300
+cache_enabled = true
+# preload_servers = ["filesystem"]  # Servers to preload in hybrid mode
+# preload_presets = ["development"] # Presets to preload
+max_concurrent_fetches = 4
+
 # Example MCP servers
 [[servers]]
 name = "filesystem"

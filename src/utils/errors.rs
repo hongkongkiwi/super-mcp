@@ -40,6 +40,21 @@ pub enum McpError {
 
     #[error("serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
+
+    #[error("installation error: {0}")]
+    InstallError(String),
+}
+
+impl From<anyhow::Error> for McpError {
+    fn from(e: anyhow::Error) -> Self {
+        McpError::InternalError(e.to_string())
+    }
+}
+
+impl From<dialoguer::Error> for McpError {
+    fn from(e: dialoguer::Error) -> Self {
+        McpError::InstallError(e.to_string())
+    }
 }
 
 impl McpError {
@@ -68,6 +83,7 @@ impl McpError {
             Self::InternalError(_) => "INTERNAL_ERROR",
             Self::Io(_) => "IO_ERROR",
             Self::Serialization(_) => "SERIALIZATION_ERROR",
+            Self::InstallError(_) => "INSTALL_ERROR",
         }
     }
 }

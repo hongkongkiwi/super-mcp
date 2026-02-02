@@ -1,5 +1,6 @@
 //! CLI command implementations
 
+pub mod install;
 pub mod mcp;
 pub mod preset;
 pub mod registry;

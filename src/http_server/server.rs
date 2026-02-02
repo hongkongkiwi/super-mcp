@@ -1,6 +1,6 @@
 use crate::auth::{AuthProvider, JwtAuth, OAuthAuth, StaticTokenAuth};
-use crate::config::{AuthConfig, AuthType, Config};
-use crate::core::ServerManager;
+use crate::config::{AuthConfig, AuthType, Config, LazyLoadingMode};
+use crate::core::{LazyToolLoader, ServerManager};
 use crate::http_server::middleware::{
     auth_middleware, create_rate_limit_layer, security_headers_middleware, size_limit_middleware,
     AuthMiddlewareState, RateLimitConfig as HttpRateLimitConfig, ScopeValidationState,
@@ -18,16 +18,36 @@ use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
 
+/// Application state shared across all routes
+pub struct AppState {
+    pub server_manager: Arc<ServerManager>,
+    pub lazy_loader: Option<Arc<LazyToolLoader>>,
+}
+
 pub struct HttpServer {
     config: Config,
     server_manager: Arc<ServerManager>,
+    lazy_loader: Option<Arc<LazyToolLoader>>,
 }
 
 impl HttpServer {
     pub fn new(config: Config, server_manager: Arc<ServerManager>) -> Self {
+        let lazy_loader = if config.lazy_loading.mode != LazyLoadingMode::Disabled {
+            let cache_ttl = Duration::from_secs(config.lazy_loading.schema_cache_ttl_seconds);
+            Some(Arc::new(LazyToolLoader::new(
+                server_manager.clone(),
+                config.lazy_loading.mode,
+                config.lazy_loading.preload_servers.clone(),
+                cache_ttl,
+            )))
+        } else {
+            None
+        };
+
         Self {
             config,
             server_manager,
+            lazy_loader,
         }
     }
 
@@ -50,11 +70,24 @@ impl HttpServer {
 
     async fn create_router(&self) -> anyhow::Result<Router> {
         let server_manager = self.server_manager.clone();
+        let lazy_loader = self.lazy_loader.clone();
+
+        let app_state = Arc::new(AppState {
+            server_manager: server_manager.clone(),
+            lazy_loader,
+        });
 
         let mut mcp_router = Router::new()
             .route("/mcp", post(routes::mcp_handler))
             .route("/mcp/:server", post(routes::server_handler))
-            .with_state(server_manager);
+            .route("/tools", get(routes::tool_list_handler))
+            .route("/tools/schema", get(routes::tool_schema_handler))
+            .route("/tools/invoke", post(routes::tool_invoke_handler))
+            .route("/servers", get(routes::list_servers_handler))
+            .route("/servers/:server_name", get(routes::server_status_handler))
+            .route("/cache/stats", get(routes::cache_stats_handler))
+            .route("/cache/clear", post(routes::cache_clear_handler))
+            .with_state(app_state);
 
         // Rate limiting
         let rate_limit_config = HttpRateLimitConfig {
