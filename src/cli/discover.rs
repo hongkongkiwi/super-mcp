@@ -664,7 +664,7 @@ pub async fn import_discovered(
     // Load existing config
     let mut config = if path.exists() {
         let content = tokio::fs::read_to_string(&path).await?;
-        toml::from_str(&content)
+        toml::from_str::<Config>(&content)
             .map_err(|e| McpError::ConfigError(format!("Failed to parse config: {}", e)))?
     } else {
         Config::default()

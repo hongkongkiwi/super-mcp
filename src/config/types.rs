@@ -7,7 +7,7 @@ use validator::Validate;
 pub use crate::runtime::types::{ResourceLimits, RuntimeConfig, RuntimeType};
 
 /// Main configuration structure
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Validate, Default)]
 pub struct Config {
     #[serde(default)]
     pub server: ServerConfig,
@@ -73,9 +73,10 @@ pub struct AuthConfig {
     pub required_scopes: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum AuthType {
+    #[default]
     None,
     Static,
     Jwt,
@@ -102,12 +103,6 @@ impl Default for AuthConfig {
             allow_unverified_jwt: false,
             required_scopes: Vec::new(),
         }
-    }
-}
-
-impl Default for AuthType {
-    fn default() -> Self {
-        AuthType::None
     }
 }
 
@@ -158,9 +153,10 @@ pub struct AuditConfig {
     pub max_files: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum LogFormat {
+    #[default]
     Json,
     Pretty,
 }
@@ -173,12 +169,6 @@ impl Default for AuditConfig {
             max_size_mb: 100,
             max_files: 10,
         }
-    }
-}
-
-impl Default for LogFormat {
-    fn default() -> Self {
-        LogFormat::Json
     }
 }
 
@@ -214,10 +204,11 @@ impl Default for LazyLoadingConfig {
 }
 
 /// Lazy loading mode
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum LazyLoadingMode {
     /// Lazy loading disabled, load all schemas eagerly
+    #[default]
     Disabled,
     /// Return meta-tools (tool_list, tool_schema, tool_invoke)
     Metatool,
@@ -227,13 +218,7 @@ pub enum LazyLoadingMode {
     Full,
 }
 
-impl Default for LazyLoadingMode {
-    fn default() -> Self {
-        LazyLoadingMode::Disabled
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
 #[serde(default)]
 pub struct McpServerConfig {
     pub name: String,
@@ -249,20 +234,6 @@ pub struct McpServerConfig {
     pub description: Option<String>,
     /// Sandbox configuration
     pub sandbox: SandboxConfig,
-}
-
-impl Default for McpServerConfig {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            command: String::new(),
-            args: Vec::new(),
-            env: HashMap::new(),
-            tags: Vec::new(),
-            description: None,
-            sandbox: SandboxConfig::default(),
-        }
-    }
 }
 
 /// Detected runner type from command
@@ -351,9 +322,10 @@ pub struct SandboxConfig {
     pub max_cpu_percent: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum SandboxType {
+    #[default]
     Default,
     Container,
     None,
@@ -377,12 +349,6 @@ impl Default for SandboxConfig {
             max_memory_mb: 512,
             max_cpu_percent: 50,
         }
-    }
-}
-
-impl Default for SandboxType {
-    fn default() -> Self {
-        SandboxType::Default
     }
 }
 
@@ -412,19 +378,6 @@ impl Default for RegistryConfig {
     }
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            server: ServerConfig::default(),
-            auth: AuthConfig::default(),
-            features: FeaturesConfig::default(),
-            rate_limit: RateLimitConfig::default(),
-            audit: AuditConfig::default(),
-            lazy_loading: LazyLoadingConfig::default(),
-            servers: vec![],
-            presets: vec![],
-            registry: RegistryConfig::default(),
-            runtimes: vec![],
-        }
-    }
-}
+
+
+

@@ -20,11 +20,7 @@ fn extract_token(request: &Request) -> Option<String> {
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| {
-            if value.starts_with("Bearer ") {
-                Some(value[7..].to_string())
-            } else {
-                None
-            }
+            value.strip_prefix("Bearer ").map(|v| v.to_string())
         })
 }
 
@@ -58,7 +54,7 @@ pub async fn auth_middleware(
                 Err(e) => {
                     if state.required {
                         let error = McpError::AuthError(format!("Invalid token: {}", e));
-                        return error.into_response();
+                        error.into_response()
                     } else {
                         // Auth not required, continue with anonymous session
                         next.run(request).await

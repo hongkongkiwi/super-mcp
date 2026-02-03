@@ -358,7 +358,7 @@ async fn install_launchd(binary_path: &str, config_path: &str) -> AnyhowResult<(
 
     // Load the daemon
     let output = Command::new("launchctl")
-        .args(&["load", "-w", plist_path.to_str().unwrap()])
+        .args(["load", "-w", plist_path.to_str().unwrap()])
         .output()?;
 
     if !output.status.success() {
@@ -368,7 +368,7 @@ async fn install_launchd(binary_path: &str, config_path: &str) -> AnyhowResult<(
 
     // Start the daemon
     let output = Command::new("launchctl")
-        .args(&["start", "com.super-mcp.agent"])
+        .args(["start", "com.super-mcp.agent"])
         .output()?;
 
     if !output.status.success() {
@@ -387,12 +387,12 @@ async fn install_launchd(binary_path: &str, config_path: &str) -> AnyhowResult<(
 async fn uninstall_launchd() -> AnyhowResult<()> {
     // Stop the daemon
     let _ = Command::new("launchctl")
-        .args(&["stop", "com.super-mcp.agent"])
+        .args(["stop", "com.super-mcp.agent"])
         .output();
 
     // Unload the daemon
     let _ = Command::new("launchctl")
-        .args(&["unload", "-w", "~/Library/LaunchAgents/com.super-mcp.agent.plist"])
+        .args(["unload", "-w", "~/Library/LaunchAgents/com.super-mcp.agent.plist"])
         .output();
 
     let plist_path = dirs::home_dir()
@@ -436,7 +436,7 @@ WantedBy=multi-user.target
 
     // Reload systemd daemon
     let output = Command::new("systemctl")
-        .args(&["daemon-reload"])
+        .args(["daemon-reload"])
         .output()?;
 
     if !output.status.success() {
@@ -446,7 +446,7 @@ WantedBy=multi-user.target
 
     // Enable and start the service
     let output = Command::new("systemctl")
-        .args(&["enable", "--now", "super-mcp"])
+        .args(["enable", "--now", "super-mcp"])
         .output()?;
 
     if !output.status.success() {
@@ -465,11 +465,11 @@ WantedBy=multi-user.target
 async fn uninstall_systemd() -> AnyhowResult<()> {
     // Stop and disable the service
     let _ = Command::new("systemctl")
-        .args(&["stop", "super-mcp"])
+        .args(["stop", "super-mcp"])
         .output();
 
     let _output = Command::new("systemctl")
-        .args(&["disable", "super-mcp"])
+        .args(["disable", "super-mcp"])
         .output();
 
     let service_path = PathBuf::from("/etc/systemd/system/super-mcp.service");
@@ -477,7 +477,7 @@ async fn uninstall_systemd() -> AnyhowResult<()> {
     if service_path.exists() {
         async_fs::remove_file(&service_path).await?;
         // Reload daemon
-        let _ = Command::new("systemctl").args(&["daemon-reload"]).output();
+        let _ = Command::new("systemctl").args(["daemon-reload"]).output();
         println!("✓ Removed systemd service file");
     }
 
@@ -513,7 +513,7 @@ depend() {{
 
     // Add to default runlevel
     let output = Command::new("rc-update")
-        .args(&["add", "super-mcp", "default"])
+        .args(["add", "super-mcp", "default"])
         .output()?;
 
     if !output.status.success() {
@@ -526,7 +526,7 @@ depend() {{
 
     // Start the service
     let output = Command::new("rc-service")
-        .args(&["super-mcp", "start"])
+        .args(["super-mcp", "start"])
         .output()?;
 
     if !output.status.success() {
@@ -545,12 +545,12 @@ depend() {{
 async fn uninstall_openrc() -> AnyhowResult<()> {
     // Stop the service
     let _ = Command::new("rc-service")
-        .args(&["super-mcp", "stop"])
+        .args(["super-mcp", "stop"])
         .output();
 
     // Remove from runlevel
     let _ = Command::new("rc-update")
-        .args(&["del", "super-mcp"])
+        .args(["del", "super-mcp"])
         .output();
 
     let init_path = PathBuf::from("/etc/init.d/super-mcp");
@@ -595,7 +595,7 @@ async fn uninstall_runit() -> AnyhowResult<()> {
     if service_dir.exists() {
         // Stop the service (if sv is available)
         let _ = Command::new("sv")
-            .args(&["down", "super-mcp"])
+            .args(["down", "super-mcp"])
             .output();
 
         async_fs::remove_dir_all(&service_dir).await?;
@@ -613,7 +613,7 @@ async fn install_nssm(binary_path: &str, config_path: &str) -> AnyhowResult<()> 
 
     // Create the service
     let output = Command::new("nssm")
-        .args(&[
+        .args([
             "install",
             "super-mcp",
             &binary_path,
@@ -630,15 +630,15 @@ async fn install_nssm(binary_path: &str, config_path: &str) -> AnyhowResult<()> 
 
     // Set additional parameters
     let _ = Command::new("nssm")
-        .args(&["set", "super-mcp", "AppStdout", r"C:\ProgramData\super-mcp\logs\stdout.log"])
+        .args(["set", "super-mcp", "AppStdout", r"C:\ProgramData\super-mcp\logs\stdout.log"])
         .output();
 
     let _ = Command::new("nssm")
-        .args(&["set", "super-mcp", "AppStderr", r"C:\ProgramData\super-mcp\logs\stderr.log"])
+        .args(["set", "super-mcp", "AppStderr", r"C:\ProgramData\super-mcp\logs\stderr.log"])
         .output();
 
     let _ = Command::new("nssm")
-        .args(&["set", "super-mcp", "AppDirectory", r"C:\Program Files\super-mcp"])
+        .args(["set", "super-mcp", "AppDirectory", r"C:\Program Files\super-mcp"])
         .output();
 
     // Create logs directory
@@ -647,7 +647,7 @@ async fn install_nssm(binary_path: &str, config_path: &str) -> AnyhowResult<()> 
 
     // Start the service
     let output = Command::new("nssm")
-        .args(&["start", "super-mcp"])
+        .args(["start", "super-mcp"])
         .output()?;
 
     if !output.status.success() {
@@ -666,12 +666,12 @@ async fn install_nssm(binary_path: &str, config_path: &str) -> AnyhowResult<()> 
 async fn uninstall_nssm() -> AnyhowResult<()> {
     // Stop the service
     let _ = Command::new("nssm")
-        .args(&["stop", "super-mcp"])
+        .args(["stop", "super-mcp"])
         .output();
 
     // Remove the service
     let output = Command::new("nssm")
-        .args(&["remove", "super-mcp", "confirm"])
+        .args(["remove", "super-mcp", "confirm"])
         .output()?;
 
     if !output.status.success() {
@@ -727,12 +727,12 @@ async fn install_schtasks(binary_path: &str, config_path: &str) -> AnyhowResult<
     );
 
     // Write task XML to temp file
-    let temp_xml = PathBuf::from(std::env::temp_dir()).join("super-mcp-task.xml");
+    let temp_xml = std::env::temp_dir().join("super-mcp-task.xml");
     async_fs::write(&temp_xml, task_xml).await?;
 
     // Create the task
     let output = Command::new("schtasks")
-        .args(&["/Create", "/TN", "super-mcp", "/XML", temp_xml.to_str().unwrap()])
+        .args(["/Create", "/TN", "super-mcp", "/XML", temp_xml.to_str().unwrap()])
         .output()?;
 
     // Clean up temp file
@@ -745,7 +745,7 @@ async fn install_schtasks(binary_path: &str, config_path: &str) -> AnyhowResult<
 
     // Run the task immediately
     let _ = Command::new("schtasks")
-        .args(&["/Run", "/TN", "super-mcp"])
+        .args(["/Run", "/TN", "super-mcp"])
         .output();
 
     println!("✓ Installed super-mcp as scheduled task");
@@ -759,12 +759,12 @@ async fn install_schtasks(binary_path: &str, config_path: &str) -> AnyhowResult<
 async fn uninstall_schtasks() -> AnyhowResult<()> {
     // End the task
     let _ = Command::new("schtasks")
-        .args(&["/End", "/TN", "super-mcp"])
+        .args(["/End", "/TN", "super-mcp"])
         .output();
 
     // Delete the task
     let output = Command::new("schtasks")
-        .args(&["/Delete", "/TN", "super-mcp", "/F"])
+        .args(["/Delete", "/TN", "super-mcp", "/F"])
         .output()?;
 
     if !output.status.success() {

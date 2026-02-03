@@ -374,7 +374,7 @@ impl OAuthAuth {
 
         if let Some(issuer) = &self.issuer {
             if !issuer.is_empty() {
-                validation.set_issuer(&[issuer.clone()]);
+                validation.set_issuer(std::slice::from_ref(issuer));
             }
         }
 

@@ -118,7 +118,7 @@ impl OneMcpConfigAdapter {
         // Convert servers
         super_mcp.servers = config.servers.iter()
             .filter(|s| s.enabled.unwrap_or(true))
-            .map(|s| Self::convert_server(s))
+            .map(Self::convert_server)
             .collect();
 
         // Convert auth
@@ -304,7 +304,7 @@ impl OneMcpMigration {
         let notes = report
             .warnings
             .into_iter()
-            .chain(report.unsupported_features.into_iter())
+            .chain(report.unsupported_features)
             .collect();
 
         (super_mcp, notes)

@@ -50,7 +50,7 @@ impl AuthProvider for JwtAuth {
         token: &str,
     ) -> McpResult<Session> {
         let mut validation = Validation::default();
-        validation.set_issuer(&[self.issuer.clone()]);
+        validation.set_issuer(std::slice::from_ref(&self.issuer));
 
         let token_data = decode::<Claims>(
             token,

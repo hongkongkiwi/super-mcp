@@ -5,7 +5,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::path::PathBuf;
+
 
 /// Runtime type enumeration
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -142,7 +142,7 @@ pub trait Runtime: Send + Sync {
     /// Execute a script file
     async fn execute_file(
         &self,
-        path: &PathBuf,
+        path: &std::path::Path,
         input: Option<Value>,
     ) -> Result<ExecutionResult, RuntimeError>;
 

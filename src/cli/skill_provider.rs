@@ -30,7 +30,7 @@ impl SkillProvider {
         let content = tokio::fs::read_to_string(&skill_file).await
             .map_err(|e| McpError::ConfigError(format!("Failed to read SKILL.md: {}", e)))?;
 
-        let tools = Self::parse_skill_md(&name, &content)?;
+        let tools = Self::parse_skill_md(name, &content)?;
 
         Ok(Self {
             name: name.to_string(),

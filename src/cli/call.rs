@@ -151,6 +151,7 @@ pub fn parse_function_style(input: &str) -> McpResult<(String, Value)> {
 }
 
 /// Execute a direct tool call
+#[allow(clippy::too_many_arguments)]
 pub async fn execute(
     config_path: Option<&str>,
     target: &str,
@@ -455,6 +456,7 @@ async fn discover_skills() -> McpResult<Vec<Box<dyn crate::core::provider::Provi
 }
 
 /// List tools from all providers
+#[allow(clippy::too_many_arguments)]
 pub async fn list_tools(
     config_path: Option<&str>,
     provider_filter: Option<&str>,
@@ -509,7 +511,7 @@ pub async fn list_tools(
             println!("{}", "─".repeat(50));
 
             for tool in tools {
-                print_tool(&tool, show_schema);
+                print_tool(tool, show_schema);
             }
         }
 

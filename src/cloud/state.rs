@@ -67,7 +67,7 @@ impl DistributedState {
             if let Some(data) = cache.get(key) {
                 return serde_json::from_slice(data)
                     .map(Some)
-                    .map_err(|e| McpError::Serialization(e));
+                    .map_err(McpError::Serialization);
             }
         }
 
@@ -80,7 +80,7 @@ impl DistributedState {
                 
                 serde_json::from_slice(&data)
                     .map(Some)
-                    .map_err(|e| McpError::Serialization(e))
+                    .map_err(McpError::Serialization)
             }
             None => Ok(None),
         }

@@ -19,7 +19,7 @@ pub enum ConfigFormat {
 
 impl ConfigFormat {
     /// Detect format from file extension and content
-    pub fn detect(path: &PathBuf, content: &str) -> Self {
+    pub fn detect(path: &std::path::Path, content: &str) -> Self {
         let ext = path.extension().and_then(|ext| ext.to_str());
 
         match ext {
@@ -36,10 +36,11 @@ impl ConfigFormat {
     }
 
     /// Detect format from file extension only
-    pub fn from_path(path: &PathBuf) -> Self {
+    pub fn from_path(path: &std::path::Path) -> Self {
         match path.extension().and_then(|ext| ext.to_str()) {
             Some("json") => ConfigFormat::Json,
-            Some("yml") | Some("yaml") | _ => ConfigFormat::Yaml,
+            Some("yml") | Some("yaml") => ConfigFormat::Yaml,
+            _ => ConfigFormat::Yaml,
         }
     }
 }
@@ -129,7 +130,7 @@ impl ConfigManager {
         Ok(manager)
     }
 
-    async fn parse_content(_path: &PathBuf, content: &str, format: ConfigFormat) -> McpResult<Config> {
+    async fn parse_content(_path: &std::path::Path, content: &str, format: ConfigFormat) -> McpResult<Config> {
         match format {
             ConfigFormat::Json => {
                 if content.contains("\"mcpServers\"") {

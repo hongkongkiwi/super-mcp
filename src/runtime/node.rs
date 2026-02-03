@@ -38,7 +38,7 @@ impl NodeRuntime {
     }
 
     /// Get the node_modules path convention
-    pub fn node_modules_path(&self, working_dir: &PathBuf) -> PathBuf {
+    pub fn node_modules_path(&self, working_dir: &std::path::Path) -> PathBuf {
         working_dir.join("node_modules")
     }
 
@@ -183,7 +183,7 @@ impl NodeRuntimeImpl {
         fs::create_dir_all(&self.config.working_dir)
             .await
             .map_err(|e| {
-                RuntimeError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+                RuntimeError::Io(std::io::Error::other(e.to_string()))
             })?;
 
         // Create package.json if it doesn't exist
@@ -200,7 +200,7 @@ impl NodeRuntimeImpl {
             )
             .await
             .map_err(|e| {
-                RuntimeError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+                RuntimeError::Io(std::io::Error::other(e.to_string()))
             })?;
         }
 
@@ -328,7 +328,7 @@ impl NodeRuntimeImpl {
         let execution_time_ms = start_time.elapsed().as_millis() as u64;
 
         let output = child.wait_with_output().await.map_err(|e| {
-            RuntimeError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+            RuntimeError::Io(std::io::Error::other(e.to_string()))
         })?;
 
         // Parse stdout as JSON if possible
@@ -379,11 +379,11 @@ impl crate::runtime::types::Runtime for NodeRuntimeImpl {
 
     async fn execute_file(
         &self,
-        path: &PathBuf,
+        path: &std::path::Path,
         input: Option<Value>,
     ) -> Result<ExecutionResult, RuntimeError> {
         let script = fs::read_to_string(path).await.map_err(|e| {
-            RuntimeError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+            RuntimeError::Io(std::io::Error::other(e.to_string()))
         })?;
 
         // If it's a TypeScript file, we need to handle it differently

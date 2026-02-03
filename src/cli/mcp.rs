@@ -24,7 +24,7 @@ pub async fn add(
         let content = tokio::fs::read_to_string(&path)
             .await
             .map_err(|e| McpError::ConfigError(format!("Failed to read config: {}", e)))?;
-        toml::from_str(&content)
+        toml::from_str::<Config>(&content)
             .map_err(|e| McpError::ConfigError(format!("Failed to parse config: {}", e)))?
     } else {
         Config::default()

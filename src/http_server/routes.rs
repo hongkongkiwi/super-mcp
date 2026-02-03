@@ -83,8 +83,8 @@ pub async fn tool_list_handler(
 
     let tools_result: Result<Vec<ToolSchema>, _> = match &state.lazy_loader {
         Some(loader) => loader.list_tools(
-            server_filter.as_ref().map(|v| v.as_slice()),
-            tag_filter.as_ref().map(|v| v.as_slice()),
+            server_filter.as_deref(),
+            tag_filter.as_deref(),
         ).await,
         None => {
             // Fallback to eager loading

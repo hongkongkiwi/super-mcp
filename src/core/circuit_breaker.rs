@@ -205,7 +205,7 @@ impl CircuitBreaker {
     /// Get statistics
     pub fn stats(&self) -> CircuitBreakerStats {
         CircuitBreakerStats {
-            state: self.state.blocking_read().clone(),
+            state: *self.state.blocking_read(),
             failure_count: self.failure_count.load(Ordering::SeqCst),
             success_count: self.success_count.load(Ordering::SeqCst),
         }

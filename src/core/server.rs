@@ -9,20 +9,15 @@ use tokio::sync::RwLock;
 use tracing::{error, info};
 
 /// Transport type for MCP servers
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TransportType {
     /// Standard input/output transport
+    #[default]
     Stdio,
     /// Server-Sent Events transport
     Sse,
     /// Streamable HTTP transport
     StreamableHttp,
-}
-
-impl Default for TransportType {
-    fn default() -> Self {
-        TransportType::Stdio
-    }
 }
 
 impl std::str::FromStr for TransportType {

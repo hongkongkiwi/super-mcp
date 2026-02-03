@@ -47,35 +47,24 @@ impl MacOSSandbox {
 
     /// Generate a Seatbelt sandbox profile based on constraints
     fn generate_profile(constraints: &SandboxConstraints) -> String {
-        let mut rules = Vec::new();
-
-        // Version declaration
-        rules.push("(version 1)".to_string());
-
-        // Deny everything by default
-        rules.push("(deny default)".to_string());
-
-        // Allow basic process operations
-        rules.push("(allow process-exec (subprocess))".to_string());
-        rules.push("(allow process-fork)".to_string());
-        rules.push("(allow signal (target self))".to_string());
-
-        // Allow reading system libraries and frameworks
-        rules.push("(allow file-read* (subpath \"/usr/lib\"))".to_string());
-        rules.push("(allow file-read* (subpath \"/System/Library\"))".to_string());
-        rules.push("(allow file-read* (subpath \"/Library/Frameworks\"))".to_string());
-        rules.push("(allow file-read* (subpath \"/System/Library/Frameworks\"))".to_string());
-
-        // Allow reading from /dev and /tmp
-        rules.push("(allow file-read* (subpath \"/dev\"))".to_string());
-        rules.push("(allow file-read* file-write* (subpath \"/tmp\"))".to_string());
-        rules.push("(allow file-read* file-write* (subpath \"/var/tmp\"))".to_string());
-
-        // Allow reading from user's home directory basics
-        rules.push("(allow file-read* (literal \"/etc/passwd\"))".to_string());
-        rules.push("(allow file-read* (regex #\"^/Users/[^/]+/.bashrc$\"))".to_string());
-        rules.push("(allow file-read* (regex #\"^/Users/[^/]+/.profile$\"))".to_string());
-        rules.push("(allow file-read* (regex #\"^/Users/[^/]+/.zshenv$\"))".to_string());
+        let mut rules = vec![
+            "(version 1)".to_string(),
+            "(deny default)".to_string(),
+            "(allow process-exec (subprocess))".to_string(),
+            "(allow process-fork)".to_string(),
+            "(allow signal (target self))".to_string(),
+            "(allow file-read* (subpath \"/usr/lib\"))".to_string(),
+            "(allow file-read* (subpath \"/System/Library\"))".to_string(),
+            "(allow file-read* (subpath \"/Library/Frameworks\"))".to_string(),
+            "(allow file-read* (subpath \"/System/Library/Frameworks\"))".to_string(),
+            "(allow file-read* (subpath \"/dev\"))".to_string(),
+            "(allow file-read* file-write* (subpath \"/tmp\"))".to_string(),
+            "(allow file-read* file-write* (subpath \"/var/tmp\"))".to_string(),
+            "(allow file-read* (literal \"/etc/passwd\"))".to_string(),
+            "(allow file-read* (regex #\"^/Users/[^/]+/.bashrc$\"))".to_string(),
+            "(allow file-read* (regex #\"^/Users/[^/]+/.profile$\"))".to_string(),
+            "(allow file-read* (regex #\"^/Users/[^/]+/.zshenv$\"))".to_string(),
+        ];
 
         // Filesystem access rules
         match &constraints.filesystem {

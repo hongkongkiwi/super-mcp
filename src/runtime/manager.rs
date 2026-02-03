@@ -9,7 +9,7 @@ use crate::runtime::types::{
 use dashmap::DashMap;
 use parking_lot::RwLock;
 use serde_json::Value;
-use std::path::PathBuf;
+
 use std::sync::Arc;
 use tracing::{debug, info};
 
@@ -224,7 +224,7 @@ impl RuntimeManager {
     pub async fn execute_file(
         &self,
         runtime_name: &str,
-        path: &PathBuf,
+        path: &std::path::Path,
         input: Option<Value>,
     ) -> Result<ExecutionResult, RuntimeError> {
         let instance = self

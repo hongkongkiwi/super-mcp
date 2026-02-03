@@ -237,7 +237,7 @@ impl StandardMcpConfigAdapter {
                 args: server_config.args.clone(),
                 env: server_config.env.clone(),
                 tags: vec![name.clone()],
-                description: Some(format!("MCP server from mcp.json")),
+                description: Some("MCP server from mcp.json".to_string()),
                 sandbox: SandboxConfig::default(),
             };
 
@@ -311,7 +311,7 @@ impl StandardMcpConfigAdapter {
                     args: mcp_server.args.clone(),
                     env: mcp_server.env.clone(),
                     tags: mcp_server.scope.clone().map(|s| vec![s]).unwrap_or_default(),
-                    description: Some(format!("MCP server from Smithery config")),
+                    description: Some("MCP server from Smithery config".to_string()),
                     sandbox: SandboxConfig::default(),
                 };
 
@@ -553,7 +553,7 @@ impl StandardMcpConfigAdapter {
 }
 
 /// Standard config format enum
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum StandardConfigFormat {
     /// mcp.json format (Claude Code)
     McpJson,
@@ -562,13 +562,8 @@ pub enum StandardConfigFormat {
     /// Smithery AI config format
     Smithery,
     /// Generic MCP config format
+    #[default]
     Generic,
-}
-
-impl Default for StandardConfigFormat {
-    fn default() -> Self {
-        StandardConfigFormat::Generic
-    }
 }
 
 /// Convert Super MCP config to standard formats
@@ -589,7 +584,7 @@ impl StandardMcpConfigWriter {
             mcp_servers.insert(server.name.clone(), server_config);
         }
 
-        let config_output = McpJsonConfig { mcp_servers: mcp_servers };
+        let config_output = McpJsonConfig { mcp_servers };
         serde_json::to_string_pretty(&config_output).unwrap_or_default()
     }
 

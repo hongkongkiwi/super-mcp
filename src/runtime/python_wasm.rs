@@ -118,12 +118,12 @@ impl PythonWasmRuntime {
         // Create a temporary file for the script
         let temp_dir = &self.config.working_dir;
         tokio::fs::create_dir_all(temp_dir).await.map_err(|e| {
-            RuntimeError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+            RuntimeError::Io(std::io::Error::other(e.to_string()))
         })?;
 
         let script_path = temp_dir.join(format!("script_{}.py", uuid::Uuid::new_v4()));
         tokio::fs::write(&script_path, script).await.map_err(|e| {
-            RuntimeError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+            RuntimeError::Io(std::io::Error::other(e.to_string()))
         })?;
 
         debug!("Executing Python script at: {:?}", script_path);
@@ -172,7 +172,7 @@ impl PythonWasmRuntime {
         let execution_time_ms = start_time.elapsed().as_millis() as u64;
 
         let output = child.wait_with_output().await.map_err(|e| {
-            RuntimeError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+            RuntimeError::Io(std::io::Error::other(e.to_string()))
         })?;
 
         // Clean up temp file
@@ -210,7 +210,7 @@ impl PythonWasmRuntime {
         // Make HTTP request to Pyodide server
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!("{}/run", self.config.pyodide_server_url))
+            .post(format!("{}/run", self.config.pyodide_server_url))
             .json(&payload)
             .timeout(Duration::from_secs(self.config.resource_limits.timeout_seconds))
             .send()
@@ -236,7 +236,7 @@ impl PythonWasmRuntime {
         // Parse Pyodide response
         // Pyodide returns: {"stdout": "...", "stderr": "...", "result": ...}
         let pyodide_response: serde_json::Value = serde_json::from_str(&response_text)
-            .map_err(|e| RuntimeError::Serialization(e))?;
+            .map_err(RuntimeError::Serialization)?;
 
         let stdout = pyodide_response
             .get("stdout")
@@ -294,7 +294,7 @@ impl crate::runtime::types::Runtime for PythonWasmRuntime {
             }
         } else {
             // Check if Python is available
-            self.find_python().map(|_| ()).map_err(|e| e)
+            self.find_python().map(|_| ())
         }
     }
 
@@ -316,11 +316,11 @@ impl crate::runtime::types::Runtime for PythonWasmRuntime {
 
     async fn execute_file(
         &self,
-        path: &PathBuf,
+        path: &std::path::Path,
         input: Option<Value>,
     ) -> Result<ExecutionResult, RuntimeError> {
         let script = tokio::fs::read_to_string(path).await.map_err(|e| {
-            RuntimeError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+            RuntimeError::Io(std::io::Error::other(e.to_string()))
         })?;
         self.execute(&script, input).await
     }

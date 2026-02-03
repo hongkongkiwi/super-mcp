@@ -10,6 +10,7 @@ use std::collections::HashSet;
 use tracing::debug;
 
 /// Scope-based filter for MCP capabilities
+#[derive(Default)]
 pub struct CapabilityFilter {
     /// Allowed server tags
     allowed_tags: HashSet<String>,
@@ -125,16 +126,6 @@ impl CapabilityFilter {
                 message: format!("Access denied: '{}' is not allowed by your scopes", resource),
                 data: None,
             }),
-        }
-    }
-}
-
-impl Default for CapabilityFilter {
-    fn default() -> Self {
-        Self {
-            allowed_tags: HashSet::new(),
-            allowed_tools: None,
-            denied_tools: HashSet::new(),
         }
     }
 }

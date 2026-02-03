@@ -21,7 +21,7 @@ pub async fn create(
         let content = tokio::fs::read_to_string(&path)
             .await
             .map_err(|e| McpError::ConfigError(format!("Failed to read config: {}", e)))?;
-        toml::from_str(&content)
+        toml::from_str::<Config>(&content)
             .map_err(|e| McpError::ConfigError(format!("Failed to parse config: {}", e)))?
     } else {
         Config::default()
@@ -41,7 +41,7 @@ pub async fn create(
         _ => {
             println!("Enter tags for this preset (comma-separated, matching server tags):");
             let mut input = String::new();
-            io::stdin().read_line(&mut input).map_err(|e| McpError::Io(e))?;
+            io::stdin().read_line(&mut input).map_err(McpError::Io)?;
             input
                 .trim()
                 .split(',')
@@ -56,9 +56,9 @@ pub async fn create(
         Some(d) => Some(d),
         None => {
             print!("Enter description for this preset (optional): ");
-            io::stdout().flush().map_err(|e| McpError::Io(e))?;
+            io::stdout().flush().map_err(McpError::Io)?;
             let mut input = String::new();
-            io::stdin().read_line(&mut input).map_err(|e| McpError::Io(e))?;
+            io::stdin().read_line(&mut input).map_err(McpError::Io)?;
             let trimmed = input.trim();
             if trimmed.is_empty() {
                 None

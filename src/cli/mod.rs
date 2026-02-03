@@ -28,7 +28,7 @@ pub fn expand_path(path: &str) -> String {
 }
 
 /// Ensure config directory exists
-pub async fn ensure_config_dir(config_path: &PathBuf) -> McpResult<()> {
+pub async fn ensure_config_dir(config_path: &std::path::Path) -> McpResult<()> {
     if let Some(parent) = config_path.parent() {
         tokio::fs::create_dir_all(parent)
             .await

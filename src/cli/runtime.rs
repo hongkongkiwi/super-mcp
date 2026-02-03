@@ -51,6 +51,7 @@ impl RuntimeTypeCli {
 }
 
 /// Add a new runtime
+#[allow(clippy::too_many_arguments)]
 pub async fn add(
     config_path: &str,
     name: &str,
@@ -67,7 +68,7 @@ pub async fn add(
     use crate::utils::errors::McpError;
 
     let type_ = type_str.parse::<RuntimeTypeCli>()
-        .map_err(|e| McpError::ConfigError(e))?;
+        .map_err(McpError::ConfigError)?;
 
     let expanded_path = expand_path(config_path);
     let config_manager = ConfigManager::new(&expanded_path).await?;
@@ -329,7 +330,7 @@ pub async fn execute(
     let result = if let Some(ref file_path) = file {
         let path = std::path::PathBuf::from(file_path);
         runtime.runtime().execute_file(&path, None).await
-    } else if let Some(ref script_content) = script {
+    } else if let Some(script_content) = script {
         runtime.runtime().execute(script_content, None).await
     } else {
         return Err(McpError::ConfigError("Either script or file must be provided".to_string()));

@@ -136,7 +136,7 @@ impl StreamableHttpTransport {
 
             // Convert to lines
             let reader = tokio_util::io::StreamReader::new(stream.map(|result| {
-                result.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+                result.map_err(std::io::Error::other)
             }));
 
             let buf_reader = BufReader::new(reader);

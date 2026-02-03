@@ -6,19 +6,14 @@ use std::collections::HashMap;
 use tracing::debug;
 
 /// Routing strategy
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum RoutingStrategy {
     FirstAvailable,
     MethodPrefix,
+    #[default]
     Capability,
     RoundRobin,
     Direct,
-}
-
-impl Default for RoutingStrategy {
-    fn default() -> Self {
-        RoutingStrategy::Capability
-    }
 }
 
 /// Server route information

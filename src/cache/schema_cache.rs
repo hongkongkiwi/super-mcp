@@ -246,11 +246,12 @@ impl SchemaCache {
 
     /// Clear all cached schemas for a server
     pub fn clear_server(&self, server_name: &str) {
+        // Collect keys to remove from tools
         let keys_to_remove: Vec<_> = self
             .tools
             .iter()
             .filter(|e| e.server_name == server_name)
-            .map(|e| Self::cache_key(&e.server_name, &e.schema.get("name").and_then(|n| n.as_str()).unwrap_or("")))
+            .map(|e| e.key().clone())
             .collect();
 
         for key in keys_to_remove {
@@ -259,11 +260,12 @@ impl SchemaCache {
             }
         }
 
+        // Collect keys to remove from resources
         let keys_to_remove: Vec<_> = self
             .resources
             .iter()
             .filter(|e| e.server_name == server_name)
-            .map(|e| Self::cache_key(&e.server_name, &e.schema.get("name").and_then(|n| n.as_str()).unwrap_or("")))
+            .map(|e| e.key().clone())
             .collect();
 
         for key in keys_to_remove {
@@ -272,11 +274,12 @@ impl SchemaCache {
             }
         }
 
+        // Collect keys to remove from prompts
         let keys_to_remove: Vec<_> = self
             .prompts
             .iter()
             .filter(|e| e.server_name == server_name)
-            .map(|e| Self::cache_key(&e.server_name, &e.schema.get("name").and_then(|n| n.as_str()).unwrap_or("")))
+            .map(|e| e.key().clone())
             .collect();
 
         for key in keys_to_remove {
