@@ -3,6 +3,43 @@
 //! This module provides MCPorter-like functionality for calling MCP tools
 //! and skills directly without running a proxy server.
 
+use serde_json::Value;
+
+/// Split arguments on commas, but respect nesting of brackets and braces
+fn split_args_respecting_nesting(input: &str) -> Vec<&str> {
+    let mut result = Vec::new();
+    let mut start = 0;
+    let mut depth: i32 = 0;
+    let mut in_string = false;
+    let mut prev_char = '\0';
+
+    for (i, c) in input.char_indices() {
+        if c == '"' || c == '\'' {
+            // Toggle string mode, but not if escaped
+            if prev_char != '\\' {
+                in_string = !in_string;
+            }
+        } else if !in_string {
+            if c == '{' || c == '[' {
+                depth += 1;
+            } else if c == '}' || c == ']' {
+                depth = depth.saturating_sub(1);
+            } else if c == ',' && depth == 0 {
+                result.push(input[start..i].trim());
+                start = i + 1;
+            }
+        }
+        prev_char = c;
+    }
+
+    // Add the last element
+    if start <= input.len() {
+        result.push(input[start..].trim());
+    }
+
+    result
+}
+
 use crate::cli::expand_path;
 use crate::cli::skill_provider::SkillProvider;
 use crate::config::{Config, McpServerConfig, SandboxConfig};
@@ -10,7 +47,6 @@ use crate::config::{Config, McpServerConfig, SandboxConfig};
 use crate::core::provider::{McpProvider, Provider, ProviderRegistry, ProviderType, Tool, ToolResult};
 use crate::core::server::{ManagedServer, TransportType};
 use crate::utils::errors::{McpError, McpResult};
-use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tracing::{debug, info};
@@ -72,9 +108,10 @@ pub fn parse_function_style(input: &str) -> McpResult<(String, Value)> {
     let mut map = serde_json::Map::new();
 
     if !args_content.trim().is_empty() {
-        // Simple parser for comma-separated key:value pairs
-        // This is a basic implementation - quotes and nested structures need JSON syntax
-        for pair in args_content.split(',') {
+        // Split on commas, but respect brackets and braces for nested structures
+        let pairs = split_args_respecting_nesting(args_content);
+
+        for pair in pairs {
             let pair = pair.trim();
             if pair.is_empty() {
                 continue;
