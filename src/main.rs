@@ -30,6 +30,14 @@ enum Cli {
     Guide,
     /// Manage runtimes
     Runtime(RuntimeArgs),
+    /// Call an MCP tool directly (lightweight client)
+    Call(CallArgs),
+    /// List tools from an MCP server or skill
+    Tools(ToolsArgs),
+    /// List all available providers (MCPs and skills)
+    Providers(ProvidersArgs),
+    /// Import MCP servers from AI editors (cursor, claude, vscode, etc.)
+    Import(ImportArgs),
 }
 
 #[derive(Parser)]
@@ -235,6 +243,99 @@ struct RuntimeArgs {
     /// Configuration file path
     #[arg(short, long, default_value = "~/.config/super-mcp/config.toml", global = true)]
     config: String,
+}
+
+#[derive(Parser)]
+struct CallArgs {
+    /// Target tool to call (format: server.tool or just tool with --stdio/--http-url/--skill)
+    target: String,
+    /// Tool arguments in key:value or key=value format
+    #[arg(value_name = "ARGS")]
+    args: Vec<String>,
+    /// Configuration file path
+    #[arg(short, long)]
+    config: Option<String>,
+    /// Ad-hoc stdio command (e.g., "npx -y @modelcontextprotocol/server-filesystem /tmp")
+    #[arg(long, conflicts_with_all = ["http_url", "skill"])]
+    stdio: Option<String>,
+    /// Ad-hoc HTTP/SSE URL
+    #[arg(long, conflicts_with_all = ["stdio", "skill"])]
+    http_url: Option<String>,
+    /// Use a skill provider
+    #[arg(long, conflicts_with_all = ["stdio", "http_url"])]
+    skill: Option<String>,
+    /// Environment variables (KEY=value format)
+    #[arg(short, long, value_delimiter = ',')]
+    env: Vec<String>,
+    /// Output as JSON
+    #[arg(short, long)]
+    json: bool,
+}
+
+#[derive(Parser)]
+struct ToolsArgs {
+    /// Provider name to list tools from (optional if using --stdio, --http-url, or --all)
+    provider: Option<String>,
+    /// Configuration file path
+    #[arg(short, long)]
+    config: Option<String>,
+    /// Ad-hoc stdio command
+    #[arg(long, conflicts_with = "http_url")]
+    stdio: Option<String>,
+    /// Ad-hoc HTTP/SSE URL
+    #[arg(long, conflicts_with = "stdio")]
+    http_url: Option<String>,
+    /// Show full schema for each tool
+    #[arg(long)]
+    schema: bool,
+    /// List tools from all providers (MCPs and skills)
+    #[arg(long)]
+    all: bool,
+    /// Output as JSON
+    #[arg(short, long)]
+    json: bool,
+}
+
+#[derive(Parser)]
+struct ProvidersArgs {
+    /// Configuration file path
+    #[arg(short, long)]
+    config: Option<String>,
+    /// Output as JSON
+    #[arg(short, long)]
+    json: bool,
+}
+
+#[derive(Parser)]
+struct ImportArgs {
+    /// Specific source to import from (cursor, claude, vscode, codex, kimi-cli, windsurf, opencode, all)
+    #[arg(value_enum)]
+    source: ImportSource,
+    /// Configuration file path
+    #[arg(short, long, default_value = "~/.config/supermcp/config.toml")]
+    config: String,
+    /// Dry run - show what would be imported without saving
+    #[arg(long)]
+    dry_run: bool,
+    /// Output as JSON
+    #[arg(short, long)]
+    json: bool,
+}
+
+#[derive(clap::ValueEnum, Clone, Debug)]
+enum ImportSource {
+    All,
+    Cursor,
+    Claude,
+    Vscode,
+    Codex,
+    KimiCli,
+    Windsurf,
+    Opencode,
+    Gemini,
+    Qwen,
+    #[value(name = "github-copilot")]
+    GithubCopilot,
 }
 
 #[derive(Subcommand, Debug)]
@@ -541,6 +642,51 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
         }
+        Cli::Call(args) => {
+            if let Err(e) = cli::call::execute(
+                args.config.as_deref(),
+                &args.target,
+                args.args,
+                args.stdio.as_deref(),
+                args.http_url.as_deref(),
+                args.skill.as_deref(),
+                args.env,
+                args.json,
+            ).await {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+        Cli::Tools(args) => {
+            if let Err(e) = cli::call::list_tools(
+                args.config.as_deref(),
+                args.provider.as_deref(),
+                args.stdio.as_deref(),
+                args.http_url.as_deref(),
+                None, // skill_name
+                args.schema,
+                args.json,
+                args.all,
+            ).await {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+        Cli::Providers(args) => {
+            if let Err(e) = cli::call::list_providers(
+                args.config.as_deref(),
+                args.json,
+            ).await {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+        Cli::Import(args) => {
+            if let Err(e) = handle_import(args).await {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
     }
 
     Ok(())
@@ -657,6 +803,85 @@ async fn validate_config(config_path: &str, format: &str) -> anyhow::Result<()> 
                     std::process::exit(1);
                 }
             }
+        }
+    }
+
+    Ok(())
+}
+
+
+async fn handle_import(args: ImportArgs) -> anyhow::Result<()> {
+    use supermcp::cli::discover;
+    use serde_json::json;
+
+    // Discover MCPs based on source
+    let mcps = match args.source {
+        ImportSource::All => discover::discover_all().await?,
+        ImportSource::Cursor => discover::discover_cursor().await?,
+        ImportSource::Claude => discover::discover_claude().await?,
+        ImportSource::Vscode => discover::discover_vscode_extensions().await?,
+        ImportSource::Codex => discover::discover_codex().await?,
+        ImportSource::KimiCli => discover::discover_kimi_cli().await?,
+        ImportSource::Windsurf => discover::discover_windsurf().await?,
+        ImportSource::Opencode => discover::discover_opencode().await?,
+        ImportSource::Gemini => discover::discover_gemini().await?,
+        ImportSource::Qwen => discover::discover_qwen().await?,
+        ImportSource::GithubCopilot => discover::discover_github_copilot().await?,
+    };
+
+    if mcps.is_empty() {
+        if args.json {
+            println!("{}", json!({"imported": [], "count": 0}));
+        } else {
+            println!("No MCP servers found from {:?}.", args.source);
+        }
+        return Ok(());
+    }
+
+    // Import into config
+    let imported = discover::import_discovered(&args.config, mcps.clone(), args.dry_run).await?;
+
+    if args.json {
+        println!("{}", json!({
+            "imported": imported,
+            "count": imported.len(),
+            "dry_run": args.dry_run,
+            "discovered": mcps.iter().map(|m| {
+                json!({
+                    "name": m.name,
+                    "source": m.source,
+                    "command": m.command,
+                    "args": m.args,
+                })
+            }).collect::<Vec<_>>(),
+        }));
+    } else {
+        println!("\n📥 Importing from {:?}\n", args.source);
+        
+        // Group by source
+        let mut by_source: std::collections::HashMap<String, Vec<&discover::DiscoveredMcp>> = std::collections::HashMap::new();
+        for mcp in &mcps {
+            by_source.entry(mcp.source.clone()).or_default().push(mcp);
+        }
+
+        for (source, servers) in by_source {
+            println!("  [{}]", source);
+            for server in servers {
+                let name = if imported.contains(&server.name) {
+                    &server.name
+                } else {
+                    // It was renamed
+                    imported.iter().find(|i| i.starts_with(&format!("{}-", server.name))).unwrap_or(&server.name)
+                };
+                println!("    - {} ({})", name, server.command);
+            }
+        }
+
+        if args.dry_run {
+            println!("\n✓ Dry run - {} server(s) would be imported", imported.len());
+            println!("  Run without --dry-run to save to config.");
+        } else {
+            println!("\n✓ Successfully imported {} server(s) to {}", imported.len(), args.config);
         }
     }
 

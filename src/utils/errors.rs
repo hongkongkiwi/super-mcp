@@ -43,6 +43,9 @@ pub enum McpError {
 
     #[error("installation error: {0}")]
     InstallError(String),
+
+    #[error("tool execution error: {0}")]
+    ToolExecutionError(String),
 }
 
 impl From<anyhow::Error> for McpError {
@@ -84,6 +87,7 @@ impl McpError {
             Self::Io(_) => "IO_ERROR",
             Self::Serialization(_) => "SERIALIZATION_ERROR",
             Self::InstallError(_) => "INSTALL_ERROR",
+            Self::ToolExecutionError(_) => "TOOL_EXECUTION_ERROR",
         }
     }
 }

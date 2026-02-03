@@ -4,6 +4,7 @@ pub mod filter;
 pub mod lazy_loader;
 pub mod pool;
 pub mod protocol;
+pub mod provider;
 pub mod request_id;
 pub mod routing;
 pub mod server;
@@ -13,6 +14,7 @@ pub use circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, CircuitBreakerMa
 pub use filter::CapabilityFilter;
 pub use lazy_loader::{LazyToolLoader, LoadMetrics, PromptArgument, PromptSchema, ResourceSchema, ToolSchema};
 pub use pool::{ConnectionPoolManager, PoolConfig, PooledConnection};
+pub use provider::{McpProvider, ParameterSchema, Provider, ProviderRegistry, ProviderType, Tool, ToolResult};
 pub use request_id::{RequestIdGenerator, SharedRequestIdGenerator};
 pub use routing::{RequestRouter, RoutingMiddleware, RoutingStrategy};
 pub use server::{ManagedServer, ServerManager, ServerStatus, TransportType};
