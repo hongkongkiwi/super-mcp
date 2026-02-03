@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use tracing::{debug, info};
 
 /// Parse arguments in shell-friendly format: key:value or key=value
-fn parse_call_args(args: &[String]) -> McpResult<Value> {
+pub fn parse_call_args(args: &[String]) -> McpResult<Value> {
     let mut map = serde_json::Map::new();
 
     for arg in args {
@@ -50,7 +50,7 @@ fn parse_call_args(args: &[String]) -> McpResult<Value> {
 }
 
 /// Parse function-call style arguments: toolName(key: value, key2: value)
-fn parse_function_style(input: &str) -> McpResult<(String, Value)> {
+pub fn parse_function_style(input: &str) -> McpResult<(String, Value)> {
     // Find the opening parenthesis
     let paren_idx = input.find('(').ok_or_else(|| {
         McpError::InvalidRequest(
