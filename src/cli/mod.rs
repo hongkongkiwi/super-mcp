@@ -1,6 +1,7 @@
 //! CLI command implementations
 
 pub mod call;
+pub use call::build_registry;
 pub mod discover;
 pub mod install;
 pub mod mcp;

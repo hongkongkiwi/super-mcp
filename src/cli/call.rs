@@ -224,7 +224,7 @@ pub async fn execute(
 }
 
 /// Build the provider registry from all sources
-pub(crate) async fn build_registry(
+pub async fn build_registry(
     config_path: Option<&str>,
     stdio_cmd: Option<&str>,
     http_url: Option<&str>,
@@ -252,7 +252,7 @@ pub(crate) async fn build_registry(
     // Add ad-hoc stdio server if specified
     if let Some(cmd) = stdio_cmd {
         let server = create_adhoc_stdio_server(cmd, vec![]).await?;
-        let provider = McpProvider::new("adhoc".to_string(), ProviderType::McpStdio, server);
+        let provider = McpProvider::new("adhoc-stdio".to_string(), ProviderType::McpStdio, server);
         registry.register(Box::new(provider));
     }
 
@@ -264,7 +264,12 @@ pub(crate) async fn build_registry(
         } else {
             ProviderType::McpHttp
         };
-        let provider = McpProvider::new("adhoc".to_string(), provider_type, server);
+        let provider_name = if url.contains("/sse") {
+            "adhoc-sse".to_string()
+        } else {
+            "adhoc-http".to_string()
+        };
+        let provider = McpProvider::new(provider_name, provider_type, server);
         registry.register(Box::new(provider));
     }
 
