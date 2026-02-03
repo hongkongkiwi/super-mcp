@@ -158,11 +158,14 @@ pub async fn execute(
     stdio_cmd: Option<&str>,
     http_url: Option<&str>,
     skill_name: Option<&str>,
-    _env_vars: Vec<String>,
+    env_vars: Vec<String>,
     json_output: bool,
 ) -> McpResult<()> {
-    // Build provider registry
-    let registry = build_registry(config_path, stdio_cmd, http_url, skill_name).await?;
+    // Parse environment variables
+    let env_vars_map = parse_env_vars(&env_vars)?;
+
+    // Build provider registry with env vars for adhoc servers
+    let registry = build_registry(config_path, stdio_cmd, http_url, skill_name, Some(env_vars_map)).await?;
 
     // Parse the tool name and arguments
     let (tool_name, params) = if target.contains('(') {
@@ -266,6 +269,7 @@ pub async fn build_registry(
     stdio_cmd: Option<&str>,
     http_url: Option<&str>,
     skill_name: Option<&str>,
+    stdio_env_vars: Option<HashMap<String, String>>,
 ) -> McpResult<ProviderRegistry> {
     let registry = ProviderRegistry::new();
 
@@ -288,7 +292,8 @@ pub async fn build_registry(
 
     // Add ad-hoc stdio server if specified
     if let Some(cmd) = stdio_cmd {
-        let server = create_adhoc_stdio_server(cmd, vec![]).await?;
+        let env_vars = stdio_env_vars.unwrap_or_default();
+        let server = create_adhoc_stdio_server(cmd, env_vars).await?;
         let provider = McpProvider::new("adhoc-stdio".to_string(), ProviderType::McpStdio, server);
         registry.register(Box::new(provider));
     }
@@ -328,7 +333,7 @@ pub async fn build_registry(
 }
 
 /// Create an ad-hoc stdio server from a command string
-async fn create_adhoc_stdio_server(cmd: &str, env_vars: Vec<String>) -> McpResult<ManagedServer> {
+async fn create_adhoc_stdio_server(cmd: &str, env_vars: HashMap<String, String>) -> McpResult<ManagedServer> {
     // Parse the command
     let parts = shell_words::split(cmd)
         .map_err(|e| McpError::ConfigError(format!("Failed to parse command: {}", e)))?;
@@ -340,14 +345,11 @@ async fn create_adhoc_stdio_server(cmd: &str, env_vars: Vec<String>) -> McpResul
     let command = parts[0].clone();
     let args = parts[1..].to_vec();
 
-    // Parse environment variables
-    let env = parse_env_vars(&env_vars)?;
-
     let config = McpServerConfig {
         name: "adhoc".to_string(),
         command,
         args,
-        env,
+        env: env_vars,
         tags: vec!["adhoc".to_string()],
         description: Some("Ad-hoc stdio connection".to_string()),
         sandbox: SandboxConfig::default(),
@@ -463,7 +465,7 @@ pub async fn list_tools(
     json_output: bool,
     all: bool,
 ) -> McpResult<()> {
-    let registry = build_registry(config_path, stdio_cmd, http_url, skill_name).await?;
+    let registry = build_registry(config_path, stdio_cmd, http_url, skill_name, None).await?;
 
     let all_tools;
 
@@ -568,7 +570,7 @@ pub async fn list_providers(
     config_path: Option<&str>,
     json_output: bool,
 ) -> McpResult<()> {
-    let registry = build_registry(config_path, None, None, None).await?;
+    let registry = build_registry(config_path, None, None, None, None).await?;
     
     let providers: Vec<_> = registry
         .list()

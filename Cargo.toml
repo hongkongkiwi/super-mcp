@@ -74,6 +74,7 @@ base64 = "0.22"
 schemars = "0.8"
 validator = { version = "0.18", features = ["derive"] }
 shell-words = "1.1"
+matches = "0.1"
 
 # Linux-specific dependencies
 [target.'cfg(target_os = "linux")'.dependencies]

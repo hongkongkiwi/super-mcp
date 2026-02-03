@@ -18,6 +18,7 @@ async fn test_adhoc_providers_have_unique_names() {
         Some("echo hello"),
         None,
         None,
+        None,
     )
     .await
     .unwrap();
@@ -33,6 +34,7 @@ async fn test_adhoc_providers_have_unique_names() {
         Some(config_path.to_str().unwrap()),
         None,
         Some("http://localhost:8080/sse"),
+        None,
         None,
     )
     .await;

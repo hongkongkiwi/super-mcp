@@ -142,33 +142,20 @@ impl Default for SharedRequestIdGenerator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use matches::matches;
 
     #[test]
     fn test_sequential_id_generation() {
         let generator = RequestIdGenerator::new();
-        
+
         let id1 = generator.next_id();
         let id2 = generator.next_id();
         let id3 = generator.next_id();
 
         // Check they are sequential numbers
-        if let crate::core::protocol::RequestId::Number(n1) = id1 {
-            assert_eq!(n1, 1);
-        } else {
-            panic!("Expected numeric ID");
-        }
-
-        if let crate::core::protocol::RequestId::Number(n2) = id2 {
-            assert_eq!(n2, 2);
-        } else {
-            panic!("Expected numeric ID");
-        }
-
-        if let crate::core::protocol::RequestId::Number(n3) = id3 {
-            assert_eq!(n3, 3);
-        } else {
-            panic!("Expected numeric ID");
-        }
+        assert!(matches!(id1, crate::core::protocol::RequestId::Number(1)));
+        assert!(matches!(id2, crate::core::protocol::RequestId::Number(2)));
+        assert!(matches!(id3, crate::core::protocol::RequestId::Number(3)));
     }
 
     #[test]
@@ -189,21 +176,12 @@ mod tests {
     #[test]
     fn test_prefixed_id_generation() {
         let generator = RequestIdGenerator::with_prefix("node1");
-        
+
         let id1 = generator.next_id();
         let id2 = generator.next_id();
 
-        if let crate::core::protocol::RequestId::String(s1) = &id1 {
-            assert!(s1.starts_with("node1-1"));
-        } else {
-            panic!("Expected string ID");
-        }
-
-        if let crate::core::protocol::RequestId::String(s2) = &id2 {
-            assert!(s2.starts_with("node1-2"));
-        } else {
-            panic!("Expected string ID");
-        }
+        assert!(matches!(id1, crate::core::protocol::RequestId::String(s) if s.starts_with("node1-1")));
+        assert!(matches!(id2, crate::core::protocol::RequestId::String(s) if s.starts_with("node1-2")));
     }
 
     #[test]
@@ -216,43 +194,25 @@ mod tests {
         let id3 = generator1.next_id();
 
         // All should be sequential
-        if let crate::core::protocol::RequestId::Number(n1) = id1 {
-            assert_eq!(n1, 1);
-        } else {
-            panic!("Expected numeric ID");
-        }
-
-        if let crate::core::protocol::RequestId::Number(n2) = id2 {
-            assert_eq!(n2, 2);
-        } else {
-            panic!("Expected numeric ID");
-        }
-
-        if let crate::core::protocol::RequestId::Number(n3) = id3 {
-            assert_eq!(n3, 3);
-        } else {
-            panic!("Expected numeric ID");
-        }
+        assert!(matches!(id1, crate::core::protocol::RequestId::Number(1)));
+        assert!(matches!(id2, crate::core::protocol::RequestId::Number(2)));
+        assert!(matches!(id3, crate::core::protocol::RequestId::Number(3)));
     }
 
     #[test]
     fn test_reset() {
         let generator = RequestIdGenerator::new();
-        
+
         let _ = generator.next_id();
         let _ = generator.next_id();
-        
+
         assert_eq!(generator.current_value(), 3);
-        
+
         generator.reset();
-        
+
         assert_eq!(generator.current_value(), 1);
-        
+
         let id = generator.next_id();
-        if let crate::core::protocol::RequestId::Number(n) = id {
-            assert_eq!(n, 1);
-        } else {
-            panic!("Expected numeric ID");
-        }
+        assert!(matches!(id, crate::core::protocol::RequestId::Number(1)));
     }
 }
