@@ -4,9 +4,10 @@
 //! and skills directly without running a proxy server.
 
 use crate::cli::expand_path;
+use crate::cli::skill_provider::SkillProvider;
 use crate::config::{Config, McpServerConfig, SandboxConfig};
 // Note: JsonRpcRequest is used internally by McpProvider
-use crate::core::provider::{McpProvider, ProviderRegistry, ProviderType, Tool, ToolResult};
+use crate::core::provider::{McpProvider, Provider, ProviderRegistry, ProviderType, Tool, ToolResult};
 use crate::core::server::{ManagedServer, TransportType};
 use crate::utils::errors::{McpError, McpResult};
 use serde_json::Value;
@@ -351,7 +352,6 @@ async fn create_adhoc_http_server(url: &str) -> McpResult<ManagedServer> {
 
 /// Load a skill provider by name
 async fn load_skill_provider(name: &str) -> McpResult<Option<Box<dyn crate::core::provider::Provider>>> {
-    // Check for skill in default skill directories
     let skill_paths = vec![
         dirs::config_dir()
             .map(|d| d.join(format!("agents/skills/{}", name))),
@@ -363,11 +363,14 @@ async fn load_skill_provider(name: &str) -> McpResult<Option<Box<dyn crate::core
     for path in skill_paths.into_iter().flatten() {
         let skill_file = path.join("SKILL.md");
         if skill_file.exists() {
-            // For now, skills are treated as documentation
-            // Future: parse SKILL.md for tool definitions
             debug!("Found skill: {} at {:?}", name, path);
-            // TODO: Implement skill provider that parses SKILL.md
-            return Ok(None);
+            match SkillProvider::new(name, path).await {
+                Ok(provider) => return Ok(Some(Box::new(provider))),
+                Err(e) => {
+                    tracing::warn!("Failed to load skill {}: {}", name, e);
+                    return Ok(None);
+                }
+            }
         }
     }
 
@@ -376,7 +379,7 @@ async fn load_skill_provider(name: &str) -> McpResult<Option<Box<dyn crate::core
 
 /// Discover all available skills
 async fn discover_skills() -> McpResult<Vec<Box<dyn crate::core::provider::Provider>>> {
-    let providers = Vec::new();
+    let mut providers = Vec::new();
 
     let skill_dirs = vec![
         dirs::config_dir().map(|d| d.join("agents/skills")),
@@ -401,7 +404,10 @@ async fn discover_skills() -> McpResult<Vec<Box<dyn crate::core::provider::Provi
                         .unwrap_or("unknown")
                         .to_string();
                     debug!("Discovered skill: {}", name);
-                    // TODO: Create skill provider
+                    match SkillProvider::new(&name, path).await {
+                        Ok(provider) => providers.push(Box::new(provider) as Box<dyn Provider>),
+                        Err(e) => tracing::warn!("Failed to load skill {}: {}", name, e),
+                    }
                 }
             }
         }

@@ -8,6 +8,8 @@ pub mod mcp;
 pub mod preset;
 pub mod registry;
 pub mod runtime;
+pub mod skill_provider;
+pub use skill_provider::SkillProvider;
 
 use crate::utils::errors::McpResult;
 use std::path::PathBuf;
